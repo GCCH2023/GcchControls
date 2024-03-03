@@ -20,18 +20,21 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	if (GcchInitialize(hInstance) == FALSE)
 		return 0;
 
-	hWnd = GcchCreateControl(0, _T("Window"), WS_OVERLAPPEDWINDOW,
+	// 使用固定坐标和窗口大小来创建
+	hWnd = GcchCreateControl(0, _T("Window0"), WS_OVERLAPPEDWINDOW,
 		300, 100, 800, 600, NULL, NULL, GcchWindowFunc, NULL);
+	GcchShowWindow(hWnd, nShowCmd);
 
-	ShowWindow(hWnd, nShowCmd);
-	UpdateWindow(hWnd);
+	// 使用客户区大小来创建，客户区加上边框会比上面的窗口更大
+	hWnd = GcchCreateWindow(0, _T("Window"), WS_OVERLAPPEDWINDOW,
+		800, 600, GcchWindowFunc, NULL);
+	GcchShowWindow(hWnd, nShowCmd);
 	
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
-
 
 	GcchUninitialize();
 	return 0;

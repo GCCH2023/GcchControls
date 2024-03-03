@@ -101,3 +101,146 @@ LRESULT GcchDefControlFunc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LP
 {
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
+
+LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom)
+{
+	rect->left = left;
+	rect->top = top;
+	rect->right = right;
+	rect->bottom = bottom;
+	return rect;
+}
+
+LPRECT GcchRectBySize(LPRECT rect, LONG x, LONG y, LONG width, LONG height)
+{
+	rect->left = x;
+	rect->top = y;
+	rect->right = x + width;
+	rect->bottom = y + height;
+	return rect;
+}
+
+LPRECT GcchRectByPoints(LPRECT rect, POINT leftTop, POINT rightBottom)
+{
+	*(LPPOINT)rect = leftTop;
+	*(LPPOINT)&rect->right = rightBottom;
+	return rect;
+}
+
+BOOL GcchRectValid(LPCRECT rect)
+{
+	return rect->left < rect->right && rect->top < rect->bottom;
+}
+
+LPRECT GcchRectCorrect(LPRECT rect)
+{
+	rect->left = min(rect->left, rect->right);
+	rect->top = min(rect->top, rect->bottom);
+	rect->right = max(rect->left, rect->right);
+	rect->bottom = max(rect->top, rect->bottom);
+	return rect;
+}
+
+BOOL GcchRectAnd(LPRECT outRect, LPCRECT rect1, LPCRECT rect2)
+{
+	// 计算矩形交集的边界值
+	LONG left = max(rect1->left, rect2->left);
+	LONG top = max(rect1->top, rect2->top);
+	LONG right = min(rect1->right, rect2->right);
+	LONG bottom = min(rect1->bottom, rect2->bottom);
+
+	// 检查是否有交集
+	BOOL hasIntersection = (left < right && top < bottom);
+
+	// 如果有交集，更新输出矩形；否则清空输出矩形
+	if (outRect)
+	{
+		if (hasIntersection)
+		{
+			outRect->left = left;
+			outRect->top = top;
+			outRect->right = right;
+			outRect->bottom = bottom;
+		}
+		else
+		{
+			memset(outRect, 0, sizeof(RECT));
+		}
+	}
+
+	return hasIntersection;
+}
+
+LPRECT GcchRectOr(LPRECT outRect, LPCRECT rect1, LPCRECT rect2)
+{
+	// 计算并更新输出矩形的左上角坐标，取两者较小值
+	outRect->left = min(rect1->left, rect2->left);
+	outRect->top = min(rect1->top, rect2->top);
+
+	// 计算并更新输出矩形的右下角坐标，取两者较大值
+	outRect->right = max(rect1->right, rect2->right);
+	outRect->bottom = max(rect1->bottom, rect2->bottom);
+
+	return outRect;
+}
+
+BOOL GcchRectContains(LPCRECT rect, LONG x, LONG y)
+{
+	return x >= rect->left && y >= rect->top && x < rect->right && y < rect->bottom;
+}
+
+LPRECT GcchRectAdd(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG dBottom)
+{
+	rect->left += dLeft;
+	rect->top += dTop;
+	rect->right += dRight;
+	rect->bottom += dBottom;
+	return rect;
+}
+
+LPRECT GcchRectShiftLeft(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG dBottom)
+{
+	rect->left <<= dLeft;
+	rect->top <<= dTop;
+	rect->right <<= dRight;
+	rect->bottom <<= dBottom;
+	return rect;
+}
+
+LPRECT GcchRectShiftRight(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG dBottom)
+{
+	rect->left >>= dLeft;
+	rect->top >>= dTop;
+	rect->right >>= dRight;
+	rect->bottom >>= dBottom;
+	return rect;
+}
+
+LPRECT GcchMakeRectCenter(LPRECT rect, LPCRECT bound)
+{
+	LONG width = rect->right - rect->left;
+	LONG height = rect->bottom - rect->top;
+	LONG x = (bound->right - bound->left - width) / 2;
+	LONG y = (bound->bottom - bound->top - height) / 2;
+	return GcchRectBySize(rect, x, y, width, height);
+}
+
+HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style, int width, int height, GcchControlFunc func, LPVOID data)
+{
+	int cx = GetSystemMetrics(SM_CXFULLSCREEN);
+	int cy = GetSystemMetrics(SM_CYFULLSCREEN);
+	RECT screen = { 0, 0, cx, cy };
+	RECT rect = { 0, 0, width, height };
+	// 根据客户区大小计算窗口大小
+	AdjustWindowRectEx(&rect, style, FALSE, exStyle);
+	GcchMakeRectCenter(&rect, &screen);
+	return GcchCreateControl(exStyle, text, style,
+		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+		NULL, NULL, func, data);
+}
+
+void GcchShowWindow(HWND hWnd, int nCmdShow)
+{
+	ShowWindow(hWnd, nCmdShow);
+	UpdateWindow(hWnd);
+}
