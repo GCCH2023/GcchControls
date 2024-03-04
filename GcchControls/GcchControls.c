@@ -127,6 +127,16 @@ LPRECT GcchRectByPoints(LPRECT rect, POINT leftTop, POINT rightBottom)
 	return rect;
 }
 
+LONG GcchGetRectWidth(LPCRECT rect)
+{
+	return rect->right - rect->left;
+}
+
+LONG GcchGetRectHeight(LPCRECT rect)
+{
+	return rect->bottom - rect->top;
+}
+
 BOOL GcchRectValid(LPCRECT rect)
 {
 	return rect->left < rect->right && rect->top < rect->bottom;
@@ -189,6 +199,15 @@ BOOL GcchRectContains(LPCRECT rect, LONG x, LONG y)
 	return x >= rect->left && y >= rect->top && x < rect->right && y < rect->bottom;
 }
 
+LPRECT GcchMoveRect(LPRECT rect, LONG deltaX, LONG deltaY)
+{
+	rect->left += deltaX;
+	rect->top += deltaY;
+	rect->right += deltaX;
+	rect->bottom += deltaY;
+	return rect;
+}
+
 LPRECT GcchRectAdd(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG dBottom)
 {
 	rect->left += dLeft;
@@ -225,6 +244,262 @@ LPRECT GcchMakeRectCenter(LPRECT rect, LPCRECT bound)
 	return GcchRectBySize(rect, x, y, width, height);
 }
 
+GcchBitmap* GcchCreateBitmap(int width, int height)
+{
+	GcchBitmap* bmp = (GcchBitmap*)GcchMalloc(sizeof(GcchBitmap));
+	BITMAPINFO bmi = { 0 };
+	HBITMAP hBitmap;	// 位图句柄
+	DWORD* pBits;		// 像素数据
+	if (!bmp)
+		return NULL;
+	bmp->hdc = CreateCompatibleDC(NULL);
+	// 创建一个设备无关位图
+	bmi.bmiHeader.biWidth = width;
+	// 对于未压缩的 RGB 位图，如果 biHeight 为正值，则位图为自下而上的 DIB，原点位于左下角。
+	// 如果 biHeight 为负数，则位图为自上而下 DIB，原点位于左上角。
+	bmi.bmiHeader.biHeight = -height;
+	bmi.bmiHeader.biSize = sizeof(bmi);
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = 32;
+	hBitmap = CreateDIBSection(bmp->hdc, &bmi, 0, (void **)&pBits, 0, 0);
+	if (!hBitmap)
+	{
+		GcchDestroyBitmap(&bmp);
+		return NULL;
+	}
+	// 设置新的位图
+	bmp->width = width;
+	bmp->height = height;
+	bmp->bitmap = hBitmap;
+	bmp->pBits = pBits;
+	bmp->oldBitmap = SelectObject(bmp->hdc, hBitmap);
+	return bmp;
+}
+
+// 根据位图句柄创建位图对象
+GcchBitmap* GcchLoadBitmap(LPCTSTR filename)
+{
+	HDC compDC;
+	HANDLE oldImage;
+	GcchBitmap* bitmap;
+	HANDLE hImage = LoadImage(g_hInstance, filename,
+		IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE | LR_CREATEDIBSECTION);
+	if (hImage == NULL)
+		return NULL;
+
+	compDC = CreateCompatibleDC(NULL);
+	if (!compDC)
+		return NULL;
+
+	oldImage = SelectObject(compDC, hImage);
+	if (oldImage == NULL)
+	{
+		DeleteDC(compDC);
+		return NULL;
+	}
+
+	// 获取BITMAP信息
+	BITMAP bmInfo;
+	GetObject(hImage, sizeof(BITMAP), &bmInfo);               // 第2个参数是要写入缓冲区的字节数
+	bitmap = GcchCreateBitmap(bmInfo.bmWidth, bmInfo.bmHeight);
+	if (!bitmap)
+	{
+		SelectObject(compDC, oldImage);
+		DeleteObject(hImage);
+		DeleteDC(compDC);
+		return NULL;
+	}
+
+	BitBlt(bitmap->hdc, 0, 0, bmInfo.bmWidth, bmInfo.bmHeight, compDC, 0, 0, SRCCOPY);
+
+	SelectObject(compDC, oldImage);
+	DeleteObject(hImage);
+	DeleteDC(compDC);
+
+	return bitmap;
+}
+
+void GcchDestroyBitmap(GcchBitmap** pBitmap)
+{
+	GcchBitmap* bmp;
+	if (!pBitmap || !*pBitmap)
+		return;
+
+	bmp = *pBitmap;
+	if (bmp->hdc && bmp->oldBitmap)
+	{
+		SelectObject(bmp->hdc, bmp->oldBitmap);
+		DeleteObject(bmp->bitmap);
+	}
+	GcchFree((LPVOID*)&bmp);
+	*pBitmap = NULL;
+}
+
+BOOL GcchDrawRectangle(GcchBitmap* bitmap, LPCRECT rect, COLORREF color)
+{
+	if (!bitmap || !bitmap->hdc)
+		return FALSE;
+	{
+		HBRUSH brush = CreateSolidBrush(color);
+		FrameRect(bitmap->hdc, rect, brush);
+		DeleteObject(brush);
+	}
+	return TRUE;
+}
+
+BOOL GcchFillRectangle(GcchBitmap* bitmap, LPCRECT rect, COLORREF color)
+{
+	if (!bitmap || !bitmap->hdc)
+		return FALSE;
+	{
+		HBRUSH brush = CreateSolidBrush(color);
+		FillRect(bitmap->hdc, rect, brush);
+		DeleteObject(brush);
+	}
+	return TRUE;
+}
+
+BOOL GcchDrawBitmap(GcchBitmap *bitmap, LPCRECT rect, GcchBitmap *srcBitmap, LONG srcX, LONG srcY)
+{
+	if (!bitmap || !srcBitmap || !bitmap->hdc)
+		return FALSE;
+	if (!GcchRectValid(rect))
+		return FALSE;
+
+	return BitBlt(bitmap->hdc, rect->left, rect->top, GcchGetRectWidth(rect), GcchGetRectHeight(rect),
+		srcBitmap->hdc, srcX, srcY, SRCCOPY);
+}
+
+
+BOOL GcchDrawBitmapEx(GcchBitmap *bitmap, LPCRECT rect, GcchBitmap *srcBitmap, LPCRECT srcRect)
+{
+	if (!bitmap || !srcBitmap || !bitmap->hdc)
+		return FALSE;
+	if (!GcchRectValid(rect))
+		return FALSE;
+
+	return StretchBlt(bitmap->hdc, rect->left, rect->top, GcchGetRectWidth(rect), GcchGetRectHeight(rect),
+		srcBitmap->hdc,srcRect->left, srcRect->top, GcchGetRectWidth(srcRect), GcchGetRectHeight(srcRect), SRCCOPY);
+}
+
+BOOL GcchDrawSliceBitmap(GcchBitmap* bmp, LPCRECT rect, GcchBitmap *srcBmp, LPCRECT srcRect, LPCRECT sliceRect)
+{
+	if (!bmp || !bmp->hdc || !srcBmp || !srcBmp->hdc)
+		return FALSE;
+
+	{
+		LONG srcWidth = srcRect->right - srcRect->left;
+		LONG srcHeight = srcRect->bottom - srcRect->top;
+		LONG srcX = srcRect->left;
+		LONG srcY = srcRect->top;
+		LONG srcCenterWidth = srcWidth - sliceRect->left - sliceRect->right;
+		LONG srcCenterHeight = srcHeight - sliceRect->top - sliceRect->bottom;
+
+		LONG width = rect->right - rect->left;
+		LONG height = rect->bottom - rect->top;
+		LONG x = rect->left;
+		LONG y = rect->top;
+		LONG centerWidth = width - sliceRect->left - sliceRect->right;
+		LONG centerHeight = height - sliceRect->top - sliceRect->bottom;
+
+		// 左上
+		BitBlt(bmp->hdc, x, y, sliceRect->left, sliceRect->top,
+			srcBmp->hdc, srcX, srcY, SRCCOPY);
+		// 中上
+		StretchBlt(bmp->hdc, x + sliceRect->left, y, centerWidth, sliceRect->top,
+			srcBmp->hdc, srcX + sliceRect->left, srcY, srcCenterWidth, sliceRect->top, SRCCOPY);
+		// 右上
+		BitBlt(bmp->hdc, rect->right - sliceRect->right, y, sliceRect->right, sliceRect->top,
+			srcBmp->hdc, srcRect->right - sliceRect->right, srcY, SRCCOPY);
+		y += sliceRect->top;
+		srcY += sliceRect->top;
+
+		// 中左
+		StretchBlt(bmp->hdc, x, y, sliceRect->left, centerHeight,
+			srcBmp->hdc, srcX, srcY, sliceRect->left, srcCenterHeight, SRCCOPY);
+		// 中中
+		StretchBlt(bmp->hdc, x + sliceRect->left, y, centerWidth, centerHeight,
+			srcBmp->hdc, srcX + sliceRect->left, srcY, srcCenterWidth, srcCenterHeight, SRCCOPY);
+		// 中右
+		StretchBlt(bmp->hdc, rect->right - sliceRect->right, y, sliceRect->right, centerHeight,
+			srcBmp->hdc, srcRect->right - sliceRect->right, srcY, sliceRect->right, srcCenterHeight, SRCCOPY);
+		y += centerHeight;
+		srcY += srcCenterHeight;
+
+		// 坐下
+		BitBlt(bmp->hdc, x, y, sliceRect->left, sliceRect->bottom,
+			srcBmp->hdc, srcX, srcY, SRCCOPY);
+		// 中下
+		StretchBlt(bmp->hdc, x + sliceRect->left, y, centerWidth, sliceRect->bottom,
+			srcBmp->hdc, srcX + sliceRect->left, srcY, srcCenterWidth, sliceRect->bottom, SRCCOPY);
+		// 右上
+		BitBlt(bmp->hdc, rect->right - sliceRect->right, y, sliceRect->right, sliceRect->bottom,
+			srcBmp->hdc, srcRect->right - sliceRect->right, srcY, SRCCOPY);
+	}
+	return TRUE;
+}
+
+BOOL GcchDrawString(GcchBitmap *bmp, LPCTSTR text, LONG x, LONG y, COLORREF color)
+{
+	if (!bmp || !bmp->hdc)
+		return FALSE;
+
+	SetTextColor(bmp->hdc, color);
+	TextOut(bmp->hdc, x, y, text, _tcslen(text));
+	return TRUE;
+}
+
+BOOL GcchDrawStringEx(GcchBitmap *bmp, LPCTSTR text, int count, LPRECT rect, COLORREF color, UINT format)
+{
+	if (!bmp || !bmp->hdc)
+		return FALSE;
+
+	SetTextColor(bmp->hdc, color);
+	DrawText(bmp->hdc, text, count, rect, format);
+	return TRUE;
+}
+
+LONG GcchMeasureString(GcchBitmap *bitmap, LPCTSTR text, int count, LPRECT rect, UINT format)
+{
+	RECT rc = { 0 };
+	if (!bitmap || !bitmap->hdc)
+		return 0;
+
+	DrawText(bitmap->hdc, text, count, &rc, format | DT_CALCRECT);
+	if (rect)
+		*rect = rc;
+	return rc.right - rc.left;
+}
+
+
+
+BOOL GcchHalfTone(GcchBitmap* bmp, LPCRECT rect)
+{
+	if (!bmp || !bmp->hdc || !bmp->pBits)
+		return FALSE;
+
+	if (!bmp->width || !bmp->height || !GcchRectValid(rect))
+		return TRUE;
+
+	{
+		LONG x, y;
+		DWORD* p;
+		RECT bound = { 0, 0, bmp->width, bmp->height };
+		if (!GcchRectAnd(&bound, rect, &bound))
+			return TRUE;
+
+		for (y = bound.top; y < bound.bottom; ++y)
+		{
+			p = &bmp->pBits[y * bmp->width];
+			for (x = bound.left; x < bound.right; ++x)
+			{
+				p[x] = ((p[x] >> 2) & 0x3F3F3F) + 0xBCBCBC;
+			}
+		}
+	}
+	return TRUE;
+}
+
 HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style, int width, int height, GcchControlFunc func, LPVOID data)
 {
 	int cx = GetSystemMetrics(SM_CXFULLSCREEN);
@@ -243,4 +518,9 @@ void GcchShowWindow(HWND hWnd, int nCmdShow)
 {
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
+}
+
+void GcchSetWindowTitle(HWND hWnd, LPCTSTR title)
+{
+	SetWindowText(hWnd, title);
 }
