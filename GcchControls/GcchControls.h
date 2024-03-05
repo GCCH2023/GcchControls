@@ -12,36 +12,102 @@ void GcchFree(LPVOID* ptr);
 
 // 消息处理函数类型
 typedef LRESULT(*GcchControlFunc)(
+	struct GcchControl* control,
 	HWND hWnd,
 	UINT msg,
 	WPARAM wParam,
-	LPARAM lParam,
-	LPVOID data
-	);
+	LPARAM lParam);
+
+
+// 附加消息
+typedef enum GcchMessage
+{
+	// 设置背景颜色，wParm 表示颜色
+	WM_USER_SET_BACKGROUND = WM_USER + 1,
+	// 设置前景颜色，wParm 表示颜色
+	WM_USER_SET_FOREGROUND,
+	// 设置排列方式，wParam 是 水平排列方式，lParam 是垂直排列方式
+	WM_USER_SET_ALIGNMENT,
+	// 设置字体，wParam 是 GcchFont 指针
+	WM_USER_SET_FONT,
+	// 设置控件的大小, wParam 是宽度，lParam 是高度
+	WM_USER_SET_SIZE,
+}GcchMessage;
+
+// 枚举控件类型
+typedef enum GcchControlType
+{
+	GCCH_CT_None,		// 不属于自定义控件
+	GCCH_CT_WINDOW,		// 窗口控件
+	GCCH_CT_LABEL,		// 标签控件
+}GcchControlType;
+
+// 水平排列方式枚举
+typedef enum GcchHorizontalAlignment
+{
+	GCCH_HA_LEFT = DT_LEFT,
+	GCCH_HA_CENTER = DT_CENTER,
+	GCCH_HA_RIGHT = DT_RIGHT,
+}GcchHorizontalAlignment;
+
+// 垂直排列方式枚举
+typedef enum GcchVerticalAlignment
+{
+	GCCH_VA_TOP = DT_TOP,
+	GCCH_VA_CENTER = DT_VCENTER,
+	GCCH_VA_BOTTOM = DT_BOTTOM,
+}GcchVerticalAlignment;
+
+// 窗口句柄
+// 消息处理函数
+// 附加数据，用于扩展
+// 控件id，窗口控件没有id
+// 控件结构体占用的字节大小
+// 控件类型
+// width 和 height 是设计的大小，不一定是最终大小
+// 如果它们大于0，怎么就是控件的实际大小
+// 否则控件将自动计算大小
+#define GCCHCTRL\
+	HWND hWnd; \
+	GcchControlFunc func; \
+	LPVOID data; \
+	UINT id; \
+	size_t bytes; \
+	int type;\
+	int width;\
+	int height;
 
 // 控件
 typedef struct GcchControl
 {
-	HWND hWnd;		// 窗口句柄
-	GcchControlFunc func;		// 消息处理函数
-	LPVOID data;		// 附加数据，用于扩展
+	GCCHCTRL
 }GcchControl;
 
+// 初始化控件的基本字段
+void GcchInitControl(GcchControl* control, GcchControlFunc func, LPVOID data,
+	UINT id, size_t bytes, GcchControlType type);
+
+// 获取控件的类型
+GcchControlType GcchGetControlType(HWND hWnd);
 
 // 创建控件, 对 CreateWindowEx 的封装
 HWND GcchCreateControl(DWORD exStyle, LPCTSTR text, DWORD style,
-	int x, int y, int width, int height, HWND parent, HMENU menu,
-	GcchControlFunc func,
-	LPVOID data);
+	int x, int y, int width, int height, HWND parent, HMENU menu, GcchControl* control);
 
 
 // 控件的默认消息处理函数
 LRESULT GcchDefControlFunc(
+	GcchControl* control,
 	HWND hWnd,
 	UINT msg,
 	WPARAM wParam,
-	LPARAM lParam,
-	LPVOID data);
+	LPARAM lParam);
+
+// 设置控件的大小
+void GcchSetControlSize(HWND hWnd, int width, int height);
+
+// 重绘窗口的全部
+BOOL GcchRedraw(HWND hWnd);
 
 // 使用 左，上，右，下 四个值来构造
 LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom);
@@ -72,7 +138,24 @@ LPRECT GcchRectShiftLeft(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG d
 LPRECT GcchRectShiftRight(LPRECT rect, LONG dLeft, LONG dTop, LONG dRight, LONG dBottom);
 // 让一个矩形在另一个矩形中居中
 LPRECT GcchMakeRectCenter(LPRECT rect, LPCRECT bound);
+// 判断两个矩形是否相等
+BOOL GcchRectEqual(LPCRECT rect1, LPCRECT rect2);
 
+
+// 字体
+typedef struct GcchFont
+{
+	HFONT hFont;
+	int width;
+	int height;
+	int weight;
+	TCHAR familyName[32];
+}GcchFont;
+
+// 创建字体
+GcchFont* GcchCreateFont(int width, int height, int weight, LPCTSTR familyName);
+// 销毁字体
+void GcchDestroyFont(GcchFont** pFont);
 
 // 位图, 用于绘图
 typedef struct GcchBitmap
@@ -122,6 +205,17 @@ BOOL GcchDrawStringEx(GcchBitmap *bitmap, LPCTSTR text, int count, LPRECT rect, 
 LONG GcchMeasureString(GcchBitmap *bitmap, LPCTSTR text, int count, LPRECT rect, UINT format);
 // 将 DIB 的色调将为一半
 BOOL GcchHalfTone(GcchBitmap* bitmap, LPCRECT rect);
+// 设置字体, 必须与UnsetFont配对使用
+BOOL GcchSetFont(GcchBitmap* bitmap, GcchFont* font);
+// 取消设置字体
+BOOL GcchUnsetFont(GcchBitmap* bitmap);
+
+
+// 窗口控件类
+typedef struct GcchWindow
+{
+	GCCHCTRL
+}GcchWindow;
 
 // 创建窗口控件，窗口控件是狭义的窗口，仅是指容纳其他控件的容器
 HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style,
@@ -133,4 +227,33 @@ void GcchShowWindow(HWND hWnd, int nCmdShow);
 // 设置窗口的标题
 void GcchSetWindowTitle(HWND hWnd, LPCTSTR title);
 
+// 标签
+// 仅支持单行文本
+typedef struct GcchLabel
+{
+	GCCHCTRL
+	COLORREF foreground;		// 文本颜色
+	COLORREF background;		// 背景颜色
+	GcchHorizontalAlignment horizontalAlignment;		// 水平排列方式
+	GcchVerticalAlignment verticalAlignment;		// 垂直排列方式
+	// 字体
+	GcchFont* font;
+}GcchLabel;
 
+// 在(x, y, width, height) 指定的区域创建标签
+// 如果 width 或 height 为 0，则自动计算
+HWND GcchCreateLabel(HWND hWndParent, UINT id, int x, int y, int width, int height, LPCTSTR text);
+// 在(x, y, width, height) 指定的区域创建标签
+// 如果 width 或 height 为 0，则自动计算
+HWND GcchCreateLabelEx(HWND hWndParent, UINT id, int x, int y, int width, int height, LPCTSTR text,
+	GcchHorizontalAlignment horizontalAlignment, GcchVerticalAlignment verticalAlignment);
+// 设置标签的文本
+BOOL GcchSetLabelText(HWND hWnd, LPCTSTR text);
+// 设置标签的背景颜色
+void GcchSetLabelBackground(HWND hWnd, COLORREF color);
+// 设置标签的文本颜色
+void GcchSetLabelForeground(HWND hWnd, COLORREF color);
+// 设置文本的排列方式
+void GcchSetLabelAlignment(HWND hWnd, GcchHorizontalAlignment horizontalAlignment, GcchVerticalAlignment verticalAlignment);
+// 设置标签的字体
+void GcchSetLabelFont(HWND hWnd, GcchFont* font);

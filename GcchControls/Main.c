@@ -4,8 +4,9 @@
 GcchBitmap* g_bitmap = NULL;
 HWND g_hWnd0 = NULL;
 HWND g_hWnd1 = NULL;
+GcchFont* g_font = NULL;
 
-LRESULT GcchWindowFunc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LPVOID data)
+LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
 	{
@@ -14,10 +15,49 @@ LRESULT GcchWindowFunc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LPVOID
 					  //RECT rect;
 					  // g_bitmap = GcchCreateBitmap(400, 400);
 					  // g_bitmap = GcchLoadBitmapById(IDB_BITMAP1);
-					  //g_bitmap = GcchLoadBitmap(_T("SKIN_BUTTON.bmp"));
+					  //g_bitmap = GcchLoadBitmap(_T("SKIN_BUTTON.bmp")); 	GcchControls.exe!GcchControlWndProc(HWND__ * hWnd, unsigned int msg, unsigned int wParam, long lParam) 行 32	C
+
 					  //GcchRect(&rect, 0, 0, g_bitmap->width, g_bitmap->height);
 					  //GcchHalfTone(g_bitmap, &rect);
+					  LOGFONT lf;
+					  g_font = GcchCreateFont(24, 24, 700, _T("Arial"));
+					  GetObject(g_font->hFont, sizeof(LOGFONT), &lf);
+					  HWND hwnd = GcchCreateLabelEx(hWnd, 1, 50, 50, 0, 0,  _T("HelloWorld"),
+						  GCCH_HA_CENTER, GCCH_VA_CENTER);
+					  DWORD err = GetLastError();
 					  return 0;
+	}
+	case WM_LBUTTONDOWN:
+	{
+						   HWND hwnd = GetDlgItem(hWnd, 1);
+						   GcchSetLabelBackground(hwnd, RGB(255, 0, 0));
+						   GcchSetControlSize(hwnd, 100, 40);
+						   return 0;
+	}
+	case WM_LBUTTONUP:
+	{
+						   HWND hwnd = GetDlgItem(hWnd, 1);
+						   GcchSetLabelFont(hwnd, g_font);
+						   return 0;
+	}
+	case WM_RBUTTONUP:
+	{
+						 HWND hwnd = GetDlgItem(hWnd, 1);
+						 GcchSetLabelFont(hwnd, NULL);
+						 return 0;
+	}
+	case WM_RBUTTONDOWN:
+	{
+						   HWND hwnd = GetDlgItem(hWnd, 1);
+						   GcchSetLabelForeground(hwnd, RGB(255, 255, 255));
+						   GcchSetLabelAlignment(hwnd, GCCH_HA_LEFT, GCCH_VA_TOP);
+						   return 0;
+	}
+	case WM_MBUTTONDOWN:
+	{
+						   HWND hwnd = GetDlgItem(hWnd, 1);
+						   GcchSetLabelText(hwnd, _T("你好2342342啊金刚狼拉进来"));
+						   return 0;
 	}
 	case WM_PAINT:
 	{
@@ -55,6 +95,7 @@ LRESULT GcchWindowFunc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LPVOID
 	}
 	case WM_DESTROY:
 		GcchDestroyBitmap(&g_bitmap);
+		GcchDestroyFont(&g_font);
 		PostQuitMessage(0);
 		return 0;
 	}
@@ -70,15 +111,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	if (GcchInitialize(hInstance) == FALSE)
 		return 0;
 
-	// 使用固定坐标和窗口大小来创建
-	hWnd = GcchCreateControl(0, _T("Window0"), WS_OVERLAPPEDWINDOW,
-		300, 100, 800, 600, NULL, NULL, GcchWindowFunc, NULL);
-	g_hWnd0 = hWnd;
-	GcchShowWindow(hWnd, nShowCmd);
+	//// 使用固定坐标和窗口大小来创建
+	//hWnd = GcchCreateControl(0, _T("Window0"), WS_OVERLAPPEDWINDOW,
+	//	300, 100, 800, 600, NULL, NULL, GcchWindowFunc, NULL);
+	//g_hWnd0 = hWnd;
+	//GcchShowWindow(hWnd, nShowCmd);
 
 	// 使用客户区大小来创建，客户区加上边框会比上面的窗口更大
 	hWnd = GcchCreateWindow(0, _T("Window"), WS_OVERLAPPEDWINDOW,
-		800, 600, GcchWindowFunc, NULL);
+		800, 600, (GcchControlFunc)GcchWindowFunc, NULL);
 	g_hWnd1 = hWnd;
 	GcchShowWindow(hWnd, nShowCmd);
 	
