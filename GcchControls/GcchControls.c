@@ -1,5 +1,7 @@
 #include "GcchControls.h"
 #include <tchar.h>
+#include <windowsx.h>
+#include "resource.h"
 
 
 // 应用程序句柄
@@ -10,6 +12,8 @@ static const TCHAR GcchControlClass[] = _T("GCCHCONTROLCLASS");
 static GcchBitmap* g_bufferBitmap = NULL;
 // 默认字体
 static GcchFont* g_defaultFont = NULL;
+// 按钮皮肤位图
+static GcchBitmap* g_buttonBitmap = NULL;
 
 // 所有控件公用的消息处理函数
 static LRESULT CALLBACK GcchControlWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -33,6 +37,7 @@ static LRESULT CALLBACK GcchControlWndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 		control = (GcchControl*)GetWindowLong(hWnd, GWL_USERDATA);
 	}
 	LRESULT ret;
+
 	if (control)
 		ret = control->func(control, hWnd, msg, wParam, lParam);
 	else
@@ -76,6 +81,9 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 	if (g_bufferBitmap == NULL)
 		return FALSE;
 	
+	g_buttonBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_BUTTON_SKIN), 0);
+	if (g_buttonBitmap == NULL)
+		return FALSE;
 
 	return TRUE;
 }
@@ -83,6 +91,7 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 
 void GcchUninitialize()
 {
+	GcchDestroyBitmap(&g_buttonBitmap);
 	GcchDestroyBitmap(&g_bufferBitmap);
 	GcchDestroyFont(&g_defaultFont);
 }
@@ -116,7 +125,7 @@ GcchControlType GcchGetControlType(HWND hWnd)
 	GcchControl* control = (GcchControl*)GetWindowLong(hWnd, GWL_USERDATA);
 	if (control)
 		return (GcchControlType)control->type;
-	return GCCH_CT_None;
+	return GCCH_CT_NONE;
 }
 
 HWND GcchCreateControl(_In_ DWORD dwExStyle, _In_opt_ LPCWSTR text, _In_ DWORD dwStyle,
@@ -148,6 +157,11 @@ void GcchSetControlSize(HWND hWnd, int width, int height)
 BOOL GcchRedraw(HWND hWnd)
 {
 	return RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE);
+}
+
+BOOL GcchRedrawNow(HWND hWnd)
+{
+	return RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
 LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom)
@@ -344,13 +358,16 @@ GcchBitmap* GcchCreateBitmap(int width, int height)
 }
 
 // 根据位图句柄创建位图对象
-GcchBitmap* GcchLoadBitmap(LPCTSTR filename)
+GcchBitmap* GcchLoadBitmap(LPCTSTR filename, UINT flags)
 {
 	HDC compDC;
 	HANDLE oldImage;
 	GcchBitmap* bitmap;
+
+	flags |= LR_CREATEDIBSECTION;
+
 	HANDLE hImage = LoadImage(g_hInstance, filename,
-		IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE | LR_CREATEDIBSECTION);
+		IMAGE_BITMAP, 0, 0, flags);
 	if (hImage == NULL)
 		return NULL;
 
@@ -810,4 +827,139 @@ void GcchSetLabelFont(HWND hWnd, GcchFont* font)
 {
 	SendMessage(hWnd, WM_USER_SET_FONT, (WPARAM)font, 0);
 	GcchRedraw(hWnd);
+}
+
+
+LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	RECT clientRect;
+	switch (msg)
+	{
+	case WM_LBUTTONDOWN:
+		SetCapture(hWnd);
+		button->state |= GCCH_CS_PRESSED;
+		GcchRedrawNow(hWnd);
+		button->event((GcchControl*)button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
+		return 0;
+	case WM_LBUTTONUP:
+		if (hWnd == GetCapture())
+		{
+			button->state &= ~GCCH_CS_PRESSED;
+			GcchRedraw(hWnd);
+			ReleaseCapture();
+			// 可以在鼠标左键按下时触发按钮的点击事件，也可以在弹起时触发
+			//GetClientRect(hWnd, &clientRect);
+			//if (GcchRectContains(&clientRect, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
+			//{
+			//	button->event(button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
+			//}
+		}
+		return 0;
+	case WM_CAPTURECHANGED:
+		button->state &= ~GCCH_CS_PRESSED;
+		GcchRedraw(hWnd);
+		return 0;
+	case WM_MOUSEMOVE:
+		GetClientRect(hWnd, &clientRect);
+		// 是否捕获，点是否在按钮内
+		if (hWnd == GetCapture())
+		{
+			if (GcchRectContains(&clientRect, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
+			{
+				// 点在按钮内
+				if ((button->state & GCCH_CS_PRESSED) == 0)
+				{
+					button->state |= GCCH_CS_PRESSED;
+					GcchRedraw(hWnd);
+				}
+			}
+			else
+			{
+				// 点不在按钮内
+				if ((button->state & GCCH_CS_PRESSED) != 0)
+				{
+					button->state &= ~GCCH_CS_PRESSED;
+					GcchRedraw(hWnd);
+				}
+			}
+		}
+		else
+		{
+			if (GcchRectContains(&clientRect, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
+			{
+				// 点在按钮内
+				if ((button->state & GCCH_CS_HOVER) == 0)
+				{
+					button->state |= GCCH_CS_HOVER;
+					GcchRedraw(hWnd);
+
+					TRACKMOUSEEVENT tme;
+					tme.cbSize = sizeof(TRACKMOUSEEVENT);
+					tme.dwFlags = TME_LEAVE;
+					tme.hwndTrack = hWnd;
+					// 调用TrackMouseEvent函数，要不然收不到鼠标离开的消息
+					TrackMouseEvent(&tme);
+				}
+			}
+			//else
+			//{
+			//	// 点不在按钮内, 应该不会出现
+			//	if ((button->state & GCCH_CS_HOVER) != 0)
+			//	{
+			//		button->state &= ~GCCH_CS_HOVER;
+			//		GcchRedraw(hWnd);
+			//	}
+			//}
+		}
+		return 0;
+	case WM_MOUSELEAVE:
+		button->state &= ~GCCH_CS_HOVER;
+		GcchRedraw(hWnd);
+		return 0;
+	case WM_PAINT:
+	{
+					 int index, x;
+					 GcchBitmap bitmap = { 0 };
+					 PAINTSTRUCT ps;
+					 RECT srcRect, sliceRect;
+					 TCHAR text[256];
+					 bitmap.hdc = BeginPaint(hWnd, &ps);
+					 GetClientRect(hWnd, &clientRect);
+					 if (IsWindowEnabled(hWnd))
+					 {
+						 if (button->state & GCCH_CS_PRESSED)
+							 index = 2;
+						 else
+							 index = (button->state & GCCH_CS_HOVER) ? 1 : 0;
+					 }
+					 else
+					 {
+						 index = 3;
+					 }
+					 x = 31 * index;		// 31 是位图中一个小块的宽度
+					 GcchRectBySize(&srcRect, x, 0, 31, 21);	// 21 是位图中一个小块的高度
+					 GcchRect(&sliceRect, 4, 4, 4, 4);
+					 GcchDrawSliceBitmap(g_bufferBitmap, &clientRect, g_buttonBitmap, &srcRect, &sliceRect);
+					 GetWindowText(hWnd, text, 256);
+					 GcchDrawStringEx(g_bufferBitmap, text, -1, &clientRect, RGB(255, 255, 255), DT_VCENTER | DT_CENTER | DT_SINGLELINE);
+					 GcchDrawBitmap(&bitmap, &clientRect, g_bufferBitmap, 0, 0);
+					 EndPaint(hWnd, &ps);
+					 return 0;
+	}
+	}
+	return GcchDefControlFunc((GcchControl*)button, hWnd, msg, wParam, lParam);
+}
+
+
+HWND GcchCreateButton(LPCTSTR text, int x, int y, int width, int height,
+	HWND hWndParent, UINT id, GcchEventFunc func, LPVOID data)
+{
+	GcchButton control = { 0 };
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)ButtonFunc, data, id, sizeof(GcchButton), GCCH_CT_BUTTON);
+	control.width = width;
+	control.height = height;
+	control.event = func;
+	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
+		x, y, width, height,
+		hWndParent, (HMENU)id, (GcchControl*)&control);
 }

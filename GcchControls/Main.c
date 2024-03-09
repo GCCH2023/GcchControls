@@ -6,6 +6,15 @@ HWND g_hWnd0 = NULL;
 HWND g_hWnd1 = NULL;
 GcchFont* g_font = NULL;
 
+LRESULT Button_Click(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	//if (msg == WM_USER_BUTTON_CLICK)
+	//{
+	//	MessageBox(NULL, _T("xxx"), _T("按钮点击"), MB_OK);
+	//}
+	return 0;
+}
+
 LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
@@ -14,31 +23,32 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 	{
 					  //RECT rect;
 					  // g_bitmap = GcchCreateBitmap(400, 400);
-					  // g_bitmap = GcchLoadBitmapById(IDB_BITMAP1);
+					  // g_bitmap = GcchLoadBitmapById(IDB_BUTTON_SKIN);
 					  //g_bitmap = GcchLoadBitmap(_T("SKIN_BUTTON.bmp")); 	GcchControls.exe!GcchControlWndProc(HWND__ * hWnd, unsigned int msg, unsigned int wParam, long lParam) 行 32	C
 
 					  //GcchRect(&rect, 0, 0, g_bitmap->width, g_bitmap->height);
 					  //GcchHalfTone(g_bitmap, &rect);
-					  LOGFONT lf;
 					  g_font = GcchCreateFont(24, 24, 700, _T("Arial"));
-					  GetObject(g_font->hFont, sizeof(LOGFONT), &lf);
+
 					  HWND hwnd = GcchCreateLabelEx(hWnd, 1, 50, 50, 0, 0,  _T("HelloWorld"),
 						  GCCH_HA_CENTER, GCCH_VA_CENTER);
-					  DWORD err = GetLastError();
+
+					  GcchCreateButton(_T("按钮"), 100, 100, 100, 40, hWnd, 2, Button_Click, NULL);
+
 					  return 0;
 	}
 	case WM_LBUTTONDOWN:
 	{
 						   HWND hwnd = GetDlgItem(hWnd, 1);
 						   GcchSetLabelBackground(hwnd, RGB(255, 0, 0));
-						   GcchSetControlSize(hwnd, 100, 40);
+						   // GcchSetControlSize(hwnd, 100, 40);
 						   return 0;
 	}
 	case WM_LBUTTONUP:
 	{
-						   HWND hwnd = GetDlgItem(hWnd, 1);
-						   GcchSetLabelFont(hwnd, g_font);
-						   return 0;
+						 HWND hwnd = GetDlgItem(hWnd, 1);
+						 GcchSetLabelFont(hwnd, g_font);
+						 return 0;
 	}
 	case WM_RBUTTONUP:
 	{

@@ -11,6 +11,8 @@ LPVOID GcchMalloc(size_t bytes);
 void GcchFree(LPVOID* ptr);
 
 // 消息处理函数类型
+// 用于实现控件的逻辑
+// 比如如何绘制按钮
 typedef LRESULT(*GcchControlFunc)(
 	struct GcchControl* control,
 	HWND hWnd,
@@ -18,6 +20,15 @@ typedef LRESULT(*GcchControlFunc)(
 	WPARAM wParam,
 	LPARAM lParam);
 
+// 事件处理函数类型
+// 用于处理控件产生的事件
+// 比如点击按钮时要做什么
+typedef LRESULT(*GcchEventFunc)(
+struct GcchControl* control,
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam);
 
 // 附加消息
 typedef enum GcchMessage
@@ -32,14 +43,18 @@ typedef enum GcchMessage
 	WM_USER_SET_FONT,
 	// 设置控件的大小, wParam 是宽度，lParam 是高度
 	WM_USER_SET_SIZE,
+
+	// 按钮被点击，没有参数
+	WM_USER_BUTTON_CLICK,
 }GcchMessage;
 
 // 枚举控件类型
 typedef enum GcchControlType
 {
-	GCCH_CT_None,		// 不属于自定义控件
+	GCCH_CT_NONE,		// 不属于自定义控件
 	GCCH_CT_WINDOW,		// 窗口控件
 	GCCH_CT_LABEL,		// 标签控件
+	GCCH_CT_BUTTON,		// 按钮控件
 }GcchControlType;
 
 // 水平排列方式枚举
@@ -57,6 +72,15 @@ typedef enum GcchVerticalAlignment
 	GCCH_VA_CENTER = DT_VCENTER,
 	GCCH_VA_BOTTOM = DT_BOTTOM,
 }GcchVerticalAlignment;
+
+// 控件的一些状态枚举
+// 比如正常状态，鼠标悬停状态等
+typedef enum GcchControlState
+{
+	GCCH_CS_NORMAL = 0,		// 正常
+	GCCH_CS_HOVER = 1,		// 鼠标悬停
+	GCCH_CS_PRESSED = 2,	// 鼠标按下
+}GcchControlState;
 
 // 窗口句柄
 // 消息处理函数
@@ -108,6 +132,8 @@ void GcchSetControlSize(HWND hWnd, int width, int height);
 
 // 重绘窗口的全部
 BOOL GcchRedraw(HWND hWnd);
+// 马上重绘窗口的全部
+BOOL GcchRedrawNow(HWND hWnd);
 
 // 使用 左，上，右，下 四个值来构造
 LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom);
@@ -173,7 +199,8 @@ typedef struct GcchBitmap
 // 创建指定大小的位图
 GcchBitmap* GcchCreateBitmap(int width, int height);
 // 从文件或资源加载位图, 只支持bmp格式
-GcchBitmap* GcchLoadBitmap(LPCTSTR filename);
+// 如果从文件加载，flags 需要设置为 LR_LOADFROMFILE
+GcchBitmap* GcchLoadBitmap(LPCTSTR filename, UINT flags);
 // 销毁位图
 void GcchDestroyBitmap(GcchBitmap** pBitmap);
 // 绘制矩形区域
@@ -257,3 +284,16 @@ void GcchSetLabelForeground(HWND hWnd, COLORREF color);
 void GcchSetLabelAlignment(HWND hWnd, GcchHorizontalAlignment horizontalAlignment, GcchVerticalAlignment verticalAlignment);
 // 设置标签的字体
 void GcchSetLabelFont(HWND hWnd, GcchFont* font);
+
+
+// 按钮
+typedef struct GcchButton
+{
+	GCCHCTRL
+	DWORD state;		// 按钮的状态
+	GcchEventFunc event;		// 事件处理函数
+}GcchButton;
+
+// 创建一个按钮
+HWND GcchCreateButton(LPCTSTR text, int x, int y, int width, int height,
+	HWND hWndParent, UINT id, GcchEventFunc func, LPVOID data);

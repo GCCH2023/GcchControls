@@ -79,10 +79,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="GcchControls.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GcchControls.c" />
     <ClCompile Include="Main.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GcchControls.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\SKIN_BUTTON.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
