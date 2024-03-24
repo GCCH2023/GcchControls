@@ -8,10 +8,10 @@ GcchFont* g_font = NULL;
 
 LRESULT Button_Click(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	//if (msg == WM_USER_BUTTON_CLICK)
-	//{
-	//	MessageBox(NULL, _T("xxx"), _T("按钮点击"), MB_OK);
-	//}
+	if (msg == WM_USER_BUTTON_CLICK)
+	{
+		MessageBox(NULL, _T("xxx"), _T("按钮点击"), MB_OK);
+	}
 	return 0;
 }
 
