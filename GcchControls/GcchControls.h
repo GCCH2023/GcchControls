@@ -30,6 +30,13 @@ struct GcchControl* control,
 	WPARAM wParam,
 	LPARAM lParam);
 
+// 触发事件
+LRESULT RaiseEvent(struct GcchControl* control,
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam);
+
 // 附加消息
 typedef enum GcchMessage
 {
@@ -46,6 +53,14 @@ typedef enum GcchMessage
 
 	// 按钮被点击，没有参数
 	WM_USER_BUTTON_CLICK,
+	// 按钮选中状态切换，wParam 是按钮是否选中
+	WM_USER_CHECK_CHANGED,
+	// 设置选中状态，wParam 表示是否选中
+	WM_USER_SET_CHECK,
+	// 获取选中状态，没有参数
+	WM_USER_GET_CHECK,
+	// 切换选中状态，没有参数
+	WM_USER_SWITCH_CHECK
 }GcchMessage;
 
 // 枚举控件类型
@@ -55,6 +70,7 @@ typedef enum GcchControlType
 	GCCH_CT_WINDOW,		// 窗口控件
 	GCCH_CT_LABEL,		// 标签控件
 	GCCH_CT_BUTTON,		// 按钮控件
+	GCCH_CT_CHECKBOX,		// 复选框控件
 }GcchControlType;
 
 // 水平排列方式枚举
@@ -80,6 +96,7 @@ typedef enum GcchControlState
 	GCCH_CS_NORMAL = 0,		// 正常
 	GCCH_CS_HOVER = 1,		// 鼠标悬停
 	GCCH_CS_PRESSED = 2,	// 鼠标按下
+	GCCH_CS_CHECKED = 2,	// 按钮选中
 }GcchControlState;
 
 // 窗口句柄
@@ -99,7 +116,9 @@ typedef enum GcchControlState
 	size_t bytes; \
 	int type;\
 	int width;\
-	int height;
+	int height;\
+	DWORD state; \
+	GcchEventFunc eventHandler;
 
 // 控件
 typedef struct GcchControl
@@ -108,7 +127,7 @@ typedef struct GcchControl
 }GcchControl;
 
 // 初始化控件的基本字段
-void GcchInitControl(GcchControl* control, GcchControlFunc func, LPVOID data,
+void GcchInitControl(GcchControl* control, GcchControlFunc func, GcchEventFunc eventHandler, LPVOID data,
 	UINT id, size_t bytes, GcchControlType type);
 
 // 获取控件的类型
@@ -117,7 +136,6 @@ GcchControlType GcchGetControlType(HWND hWnd);
 // 创建控件, 对 CreateWindowEx 的封装
 HWND GcchCreateControl(DWORD exStyle, LPCTSTR text, DWORD style,
 	int x, int y, int width, int height, HWND parent, HMENU menu, GcchControl* control);
-
 
 // 控件的默认消息处理函数
 LRESULT GcchDefControlFunc(
@@ -247,7 +265,7 @@ typedef struct GcchWindow
 // 创建窗口控件，窗口控件是狭义的窗口，仅是指容纳其他控件的容器
 HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style,
 	int width, int height,
-	GcchControlFunc func,
+	GcchControlFunc func, GcchEventFunc eventHandler,
 	LPVOID data);
 // 显示窗口
 void GcchShowWindow(HWND hWnd, int nCmdShow);
@@ -285,15 +303,38 @@ void GcchSetLabelAlignment(HWND hWnd, GcchHorizontalAlignment horizontalAlignmen
 // 设置标签的字体
 void GcchSetLabelFont(HWND hWnd, GcchFont* font);
 
+typedef struct GcchButtonBase
+{
+	GCCHCTRL
+}GcchButtonBase;
+
+// 按钮的共同代码封装
+LRESULT GcchDefButtonFunc(
+	GcchButtonBase* button,
+	HWND hWnd,
+	UINT msg,
+	WPARAM wParam,
+	LPARAM lParam);
 
 // 按钮
 typedef struct GcchButton
 {
 	GCCHCTRL
-	DWORD state;		// 按钮的状态
-	GcchEventFunc event;		// 事件处理函数
 }GcchButton;
 
 // 创建一个按钮
 HWND GcchCreateButton(LPCTSTR text, int x, int y, int width, int height,
-	HWND hWndParent, UINT id, GcchEventFunc func, LPVOID data);
+	HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data);
+
+// 复选框
+typedef struct GcchCheckBox
+{
+	GCCHCTRL
+}GcchCheckBox;
+
+// 创建一个复选框
+HWND GcchCreateCheckBox(LPCTSTR text, int x, int y, 
+	HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data);
+void GcchSetCheck(HWND hWnd, BOOL isCheck);
+void GcchSwitchCheck(HWND hWnd);
+BOOL GcchGetCheck(HWND hWnd);

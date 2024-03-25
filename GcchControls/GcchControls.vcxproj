@@ -90,6 +90,7 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\SKIN_BUTTON.bmp" />
+    <Image Include="res\SKIN_CHECKBOX.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

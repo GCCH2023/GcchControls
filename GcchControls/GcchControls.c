@@ -14,6 +14,10 @@ static GcchBitmap* g_bufferBitmap = NULL;
 static GcchFont* g_defaultFont = NULL;
 // 按钮皮肤位图
 static GcchBitmap* g_buttonBitmap = NULL;
+// 复选框位图
+static GcchBitmap* g_checkBoxBitmap = NULL;
+// 当前悬停的窗口
+static HWND g_hWndMouseHover = NULL;
 
 // 所有控件公用的消息处理函数
 static LRESULT CALLBACK GcchControlWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -39,7 +43,18 @@ static LRESULT CALLBACK GcchControlWndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 	LRESULT ret;
 
 	if (control)
+	{
+		switch (msg)
+		{
+		case WM_MOUSEMOVE:
+			if (hWnd != g_hWndMouseHover)
+			{
+				SendMessage(g_hWndMouseHover, WM_MOUSELEAVE, (WPARAM)hWnd, 0);
+				g_hWndMouseHover = hWnd;
+			}
+		}
 		ret = control->func(control, hWnd, msg, wParam, lParam);
+	}
 	else
 		ret = DefWindowProc(hWnd, msg, wParam, lParam);
 
@@ -81,8 +96,12 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 	if (g_bufferBitmap == NULL)
 		return FALSE;
 	
-	g_buttonBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_BUTTON_SKIN), 0);
+	g_buttonBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_BUTTON), 0);
 	if (g_buttonBitmap == NULL)
+		return FALSE;
+
+	g_checkBoxBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_CHECKBOX), 0);
+	if (g_checkBoxBitmap == NULL)
 		return FALSE;
 
 	return TRUE;
@@ -110,7 +129,14 @@ void GcchFree(LPVOID* ptr)
 	}
 }
 
-void GcchInitControl(GcchControl* control, GcchControlFunc func, LPVOID data,
+LRESULT RaiseEvent(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (control && control->eventHandler)
+		return control->eventHandler(control, hWnd, msg, wParam, lParam);
+	return 0;
+}
+
+void GcchInitControl(GcchControl* control, GcchControlFunc func, GcchEventFunc eventHandler, LPVOID data,
 	UINT id, size_t bytes, GcchControlType type)
 {
 	control->func = func;
@@ -118,6 +144,7 @@ void GcchInitControl(GcchControl* control, GcchControlFunc func, LPVOID data,
 	control->id = id;
 	control->bytes = bytes;
 	control->type = type;
+	control->eventHandler = eventHandler;
 }
 
 GcchControlType GcchGetControlType(HWND hWnd)
@@ -140,6 +167,14 @@ HWND GcchCreateControl(_In_ DWORD dwExStyle, _In_opt_ LPCWSTR text, _In_ DWORD d
 
 LRESULT GcchDefControlFunc(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	switch (msg)
+	{
+	case WM_MOUSEMOVE:
+		if ((control->state & GCCH_CS_HOVER) == 0)
+		{
+
+		}
+	}
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
@@ -652,7 +687,8 @@ void GcchDestroyFont(GcchFont** pFont)
 	*pFont = NULL;
 }
 
-HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style, int width, int height, GcchControlFunc func, LPVOID data)
+HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style, int width, int height, 
+	GcchControlFunc func, GcchEventFunc eventHandler, LPVOID data)
 {
 	GcchWindow window = { 0 };
 	int cx = GetSystemMetrics(SM_CXFULLSCREEN);
@@ -663,7 +699,7 @@ HWND GcchCreateWindow(DWORD exStyle, LPCTSTR text, DWORD style, int width, int h
 	AdjustWindowRectEx(&rect, style, FALSE, exStyle);
 	GcchMakeRectCenter(&rect, &screen);
 
-	GcchInitControl((GcchControl*)&window, func, data, 0, sizeof(GcchWindow), GCCH_CT_WINDOW);
+	GcchInitControl((GcchControl*)&window, func, eventHandler, data, 0, sizeof(GcchWindow), GCCH_CT_WINDOW);
 	return GcchCreateControl(exStyle, text, style,
 		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
 		NULL, NULL, (GcchControl*)&window);
@@ -707,7 +743,7 @@ static void AdjustLabelRect(GcchLabel* label)
 		SetWindowPos(label->hWnd, NULL, 0, 0, GcchGetRectWidth(&rect), GcchGetRectHeight(&rect), SWP_NOMOVE | SWP_NOZORDER);
 }
 
-LRESULT LabelFunc(GcchLabel *label, HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM lParam)
+static LRESULT LabelFunc(GcchLabel *label, HWND hWnd, unsigned int msg, WPARAM wParam, LPARAM lParam)
 {
 	switch (msg)
 	{
@@ -786,7 +822,8 @@ HWND GcchCreateLabelEx(HWND hWndParent, UINT id, int x, int y, int width, int he
 {
 	GcchLabel label = { 0 };
 	RECT rect;
-	GcchInitControl((GcchControl*)&label, (GcchControlFunc)LabelFunc, NULL, id, sizeof(GcchLabel), GCCH_CT_LABEL);
+	GcchInitControl((GcchControl*)&label, (GcchControlFunc)LabelFunc, NULL,
+		NULL, id, sizeof(GcchLabel), GCCH_CT_LABEL);
 	label.background = RGB(250, 250, 250);
 	label.verticalAlignment = verticalAlignment;
 	label.horizontalAlignment = horizontalAlignment;
@@ -830,7 +867,19 @@ void GcchSetLabelFont(HWND hWnd, GcchFont* font)
 }
 
 
-LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT GcchDefButtonFunc(GcchButtonBase* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg)
+	{
+	case WM_MOUSELEAVE:
+		button->state &= ~GCCH_CS_HOVER;
+		GcchRedraw(hWnd);
+		return 0;
+	}
+	return GcchDefControlFunc((GcchControl*)button, hWnd, msg, wParam, lParam);
+}
+
+static LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	RECT clientRect;
 	switch (msg)
@@ -839,7 +888,7 @@ LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARA
 		SetCapture(hWnd);
 		button->state |= GCCH_CS_PRESSED;
 		GcchRedrawNow(hWnd);
-		button->event((GcchControl*)button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
+		RaiseEvent((GcchControl*)button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
 		return 0;
 	case WM_LBUTTONUP:
 		if (hWnd == GetCapture())
@@ -851,7 +900,7 @@ LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			//GetClientRect(hWnd, &clientRect);
 			//if (GcchRectContains(&clientRect, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
 			//{
-			//	button->event(button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
+			//	button->eventHandler(button, hWnd, WM_USER_BUTTON_CLICK, 0, 0);
 			//}
 		}
 		return 0;
@@ -892,13 +941,6 @@ LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARA
 				{
 					button->state |= GCCH_CS_HOVER;
 					GcchRedraw(hWnd);
-
-					TRACKMOUSEEVENT tme;
-					tme.cbSize = sizeof(TRACKMOUSEEVENT);
-					tme.dwFlags = TME_LEAVE;
-					tme.hwndTrack = hWnd;
-					// 调用TrackMouseEvent函数，要不然收不到鼠标离开的消息
-					TrackMouseEvent(&tme);
 				}
 			}
 			//else
@@ -911,10 +953,6 @@ LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARA
 			//	}
 			//}
 		}
-		return 0;
-	case WM_MOUSELEAVE:
-		button->state &= ~GCCH_CS_HOVER;
-		GcchRedraw(hWnd);
 		return 0;
 	case WM_PAINT:
 	{
@@ -947,19 +985,130 @@ LRESULT ButtonFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARA
 					 return 0;
 	}
 	}
-	return GcchDefControlFunc((GcchControl*)button, hWnd, msg, wParam, lParam);
+	return GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
 }
 
 
 HWND GcchCreateButton(LPCTSTR text, int x, int y, int width, int height,
-	HWND hWndParent, UINT id, GcchEventFunc func, LPVOID data)
+	HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data)
 {
 	GcchButton control = { 0 };
-	GcchInitControl((GcchControl*)&control, (GcchControlFunc)ButtonFunc, data, id, sizeof(GcchButton), GCCH_CT_BUTTON);
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)ButtonFunc, eventHandler,
+		data, id, sizeof(GcchButton), GCCH_CT_BUTTON);
 	control.width = width;
 	control.height = height;
-	control.event = func;
 	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
 		x, y, width, height,
 		hWndParent, (HMENU)id, (GcchControl*)&control);
+}
+
+// 计算复选框的宽度
+static LONG GetCheckBoxWidth(LPCTSTR text)
+{
+	return GcchMeasureString(g_bufferBitmap, text, -1, NULL, 0) + 18;
+}
+
+
+static LRESULT CheckBoxFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	RECT clientRect;
+	int width;
+	switch (msg)
+	{
+	case WM_USER_GET_CHECK:
+		return (button->state & GCCH_CS_CHECKED) != 0;
+	case WM_USER_SET_CHECK:
+		if (wParam == (button->state & GCCH_CS_CHECKED))
+			return 0;
+	case WM_USER_SWITCH_CHECK:
+	case WM_LBUTTONDOWN:
+		button->state ^= GCCH_CS_CHECKED;
+		GcchRedraw(hWnd);
+		RaiseEvent((GcchControl*)button, hWnd, WM_USER_CHECK_CHANGED,
+			(button->state & GCCH_CS_CHECKED) != 0, 0);
+		return 0;
+	case WM_CAPTURECHANGED:
+		button->state &= ~GCCH_CS_PRESSED;
+		GcchRedraw(hWnd);
+		return 0;
+	case WM_MOUSEMOVE:
+		if ((button->state & GCCH_CS_HOVER) == 0)
+		{
+			button->state |= GCCH_CS_HOVER;
+			GcchRedraw(hWnd);
+		}
+		return 0;
+	case WM_SETTEXT:
+		GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
+		width = GetCheckBoxWidth((LPCTSTR)lParam);
+		SetWindowPos(hWnd, NULL, 0, 0, width, 13, SWP_NOMOVE | SWP_NOZORDER);
+		return 0;
+	case WM_PAINT:
+	{
+					 COLORREF color;
+					 int x, y;
+					 GcchBitmap bitmap = { 0 };
+					 PAINTSTRUCT ps;
+					 RECT rect;
+					 TCHAR text[256];
+					 bitmap.hdc = BeginPaint(hWnd, &ps);
+					 GetClientRect(hWnd, &clientRect);
+					 GcchFillRectangle(g_bufferBitmap, &clientRect, 0xFAFAFA);
+					 if (IsWindowEnabled(hWnd))
+					 {
+						 color = 0;
+						 x = 0;
+						 if ((button->state & 1) != 0)
+						 {
+							 color = 0x5645BE;
+							 x = 14;
+						 }
+					 }
+					 else
+					 {
+						 color = 0xC0C0C0;
+						 x = 28;
+					 }
+					 y = (button->state & GCCH_CS_CHECKED) ? 14 : 0;
+					 GcchRect(&rect, 0, 0, 13, 13);
+					 GcchDrawBitmap(g_bufferBitmap, &rect, g_checkBoxBitmap, x, y);
+					 GetWindowText(hWnd, text, 255);
+					 rect = clientRect;
+					 rect.left += 16;
+					 GcchDrawStringEx(g_bufferBitmap, text, -1, &rect, color, DT_END_ELLIPSIS | DT_SINGLELINE | DT_VCENTER);
+					 GcchDrawBitmap(&bitmap, &clientRect, g_bufferBitmap, 0, 0);
+					 EndPaint(hWnd, &ps);
+					 return 0;
+	}
+	}
+	return GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
+}
+
+
+HWND GcchCreateCheckBox(LPCTSTR text, int x, int y,
+	HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data)
+{
+	GcchCheckBox control = { 0 };
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)CheckBoxFunc, eventHandler, 
+		data, id, sizeof(GcchCheckBox), GCCH_CT_CHECKBOX);
+	control.width = GetCheckBoxWidth(text);
+	control.height = 13;
+	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
+		x, y, control.width, control.height,
+		hWndParent, (HMENU)id, (GcchControl*)&control);
+}
+
+void GcchSetCheck(HWND hWnd, BOOL isCheck)
+{
+	SendMessage(hWnd, WM_USER_SET_CHECK, isCheck, 0);
+}
+
+void GcchSwitchCheck(HWND hWnd)
+{
+	SendMessage(hWnd, WM_USER_SWITCH_CHECK, 0, 0);
+}
+
+BOOL GcchGetCheck(HWND hWnd)
+{
+	return SendMessage(hWnd, WM_USER_GET_CHECK, 0, 0);
 }

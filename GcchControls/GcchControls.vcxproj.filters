@@ -39,5 +39,8 @@
     <Image Include="res\SKIN_BUTTON.bmp">
       <Filter>资源文件</Filter>
     </Image>
+    <Image Include="res\SKIN_CHECKBOX.bmp">
+      <Filter>资源文件</Filter>
+    </Image>
   </ItemGroup>
 </Project>
