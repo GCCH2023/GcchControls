@@ -22,9 +22,24 @@ LRESULT CheckBoxEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM w
 	{
 		HWND hWnd = (HWND)control->data;
 		if (wParam)
-			GcchSetLabelText(hWnd, _T("复选框选中"));
+			GcchSetText(hWnd, _T("复选框选中"));
 		else
-			GcchSetLabelText(hWnd, _T("复选框未选中"));
+			GcchSetText(hWnd, _T("复选框未选中"));
+	}
+	return 0;
+}
+
+LRESULT RadioButtonEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	if (msg == WM_USER_CHECK_CHANGED)
+	{
+		if (wParam)
+		{
+			TCHAR buffer[256];
+			HWND hwnd = (HWND)control->data;
+			GcchGetText(hWnd, buffer, ARRAYSIZE(buffer));
+			GcchSetText(hwnd, buffer);
+		}
 	}
 	return 0;
 }
@@ -32,6 +47,7 @@ LRESULT CheckBoxEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM w
 
 LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	static GcchRadioItem radioItem = { 0 };
 	switch (msg)
 	{
 	case WM_CREATE:
@@ -47,8 +63,12 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 
 					  HWND hwnd = GcchCreateLabelEx(hWnd, 1, 50, 50, 0, 0,  _T("HelloWorld"),
 						  GCCH_HA_CENTER, GCCH_VA_CENTER);
+					  GcchCreateRadioButton(&radioItem, _T("单选框0"), 50, 150, hWnd, 4, RadioButtonEventHandler, hwnd);
+					  GcchCreateRadioButton(&radioItem, _T("单选框1"), 50, 180, hWnd, 5, RadioButtonEventHandler, hwnd);
+					  GcchCreateRadioButton(&radioItem, _T("单选框2"), 50, 210, hWnd, 6, RadioButtonEventHandler, hwnd);
 					  hwnd = GcchCreateCheckBox(_T("复选框"), 50, 80, hWnd, 3, CheckBoxEventHandler, hwnd);
 					  GcchCreateButton(_T("按钮"), 50, 100, 100, 40, hWnd, 2, ButtonEventHandler, hwnd);
+
 
 					  return 0;
 	}

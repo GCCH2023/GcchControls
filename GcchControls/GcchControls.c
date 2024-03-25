@@ -2,7 +2,7 @@
 #include <tchar.h>
 #include <windowsx.h>
 #include "resource.h"
-
+#include <assert.h>
 
 // 应用程序句柄
 static HINSTANCE g_hInstance = NULL;
@@ -16,6 +16,8 @@ static GcchFont* g_defaultFont = NULL;
 static GcchBitmap* g_buttonBitmap = NULL;
 // 复选框位图
 static GcchBitmap* g_checkBoxBitmap = NULL;
+// 单选框位图
+static GcchBitmap* g_radioBitmap = NULL;
 // 当前悬停的窗口
 static HWND g_hWndMouseHover = NULL;
 
@@ -104,6 +106,10 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 	if (g_checkBoxBitmap == NULL)
 		return FALSE;
 
+	g_radioBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_RADIO), 0);
+	if (g_radioBitmap == NULL)
+		return FALSE;
+
 	return TRUE;
 }
 
@@ -111,6 +117,8 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 void GcchUninitialize()
 {
 	GcchDestroyBitmap(&g_buttonBitmap);
+	GcchDestroyBitmap(&g_checkBoxBitmap);
+	GcchDestroyBitmap(&g_radioBitmap);
 	GcchDestroyBitmap(&g_bufferBitmap);
 	GcchDestroyFont(&g_defaultFont);
 }
@@ -155,6 +163,12 @@ GcchControlType GcchGetControlType(HWND hWnd)
 	return GCCH_CT_NONE;
 }
 
+
+int GcchGetText(HWND hWnd, LPTSTR buffer, int bufferSize)
+{
+	return GetWindowText(hWnd, buffer, bufferSize);
+}
+
 HWND GcchCreateControl(_In_ DWORD dwExStyle, _In_opt_ LPCWSTR text, _In_ DWORD dwStyle,
 	_In_ int X, _In_ int Y, _In_ int nWidth, _In_ int nHeight,
 	_In_opt_ HWND hWndParent, _In_opt_ HMENU hMenu, GcchControl* control)
@@ -167,14 +181,6 @@ HWND GcchCreateControl(_In_ DWORD dwExStyle, _In_opt_ LPCWSTR text, _In_ DWORD d
 
 LRESULT GcchDefControlFunc(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	switch (msg)
-	{
-	case WM_MOUSEMOVE:
-		if ((control->state & GCCH_CS_HOVER) == 0)
-		{
-
-		}
-	}
 	return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
@@ -837,7 +843,7 @@ HWND GcchCreateLabelEx(HWND hWndParent, UINT id, int x, int y, int width, int he
 
 }
 
-BOOL GcchSetLabelText(HWND hWnd, LPCTSTR text)
+BOOL GcchSetText(HWND hWnd, LPCTSTR text)
 {
 	BOOL ret = SetWindowText(hWnd, text);
 	if (ret)
@@ -871,6 +877,13 @@ LRESULT GcchDefButtonFunc(GcchButtonBase* button, HWND hWnd, UINT msg, WPARAM wP
 {
 	switch (msg)
 	{
+	case WM_MOUSEMOVE:
+		if ((button->state & GCCH_CS_HOVER) == 0)
+		{
+			button->state |= GCCH_CS_HOVER;
+			GcchRedraw(hWnd);
+		}
+		return 0;
 	case WM_MOUSELEAVE:
 		button->state &= ~GCCH_CS_HOVER;
 		GcchRedraw(hWnd);
@@ -1009,7 +1022,7 @@ static LONG GetCheckBoxWidth(LPCTSTR text)
 }
 
 
-static LRESULT CheckBoxFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static LRESULT CheckBoxFunc(GcchCheckBox* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	RECT clientRect;
 	int width;
@@ -1018,25 +1031,14 @@ static LRESULT CheckBoxFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wPar
 	case WM_USER_GET_CHECK:
 		return (button->state & GCCH_CS_CHECKED) != 0;
 	case WM_USER_SET_CHECK:
-		if (wParam == (button->state & GCCH_CS_CHECKED))
+		if (wParam == GcchGetCheck(hWnd))
 			return 0;
 	case WM_USER_SWITCH_CHECK:
 	case WM_LBUTTONDOWN:
 		button->state ^= GCCH_CS_CHECKED;
 		GcchRedraw(hWnd);
 		RaiseEvent((GcchControl*)button, hWnd, WM_USER_CHECK_CHANGED,
-			(button->state & GCCH_CS_CHECKED) != 0, 0);
-		return 0;
-	case WM_CAPTURECHANGED:
-		button->state &= ~GCCH_CS_PRESSED;
-		GcchRedraw(hWnd);
-		return 0;
-	case WM_MOUSEMOVE:
-		if ((button->state & GCCH_CS_HOVER) == 0)
-		{
-			button->state |= GCCH_CS_HOVER;
-			GcchRedraw(hWnd);
-		}
+			GcchGetCheck(hWnd), 0);
 		return 0;
 	case WM_SETTEXT:
 		GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
@@ -1069,7 +1071,7 @@ static LRESULT CheckBoxFunc(GcchButton* button, HWND hWnd, UINT msg, WPARAM wPar
 						 color = 0xC0C0C0;
 						 x = 28;
 					 }
-					 y = (button->state & GCCH_CS_CHECKED) ? 14 : 0;
+					 y = GcchGetCheck(hWnd) ? 14 : 0;
 					 GcchRect(&rect, 0, 0, 13, 13);
 					 GcchDrawBitmap(g_bufferBitmap, &rect, g_checkBoxBitmap, x, y);
 					 GetWindowText(hWnd, text, 255);
@@ -1111,4 +1113,105 @@ void GcchSwitchCheck(HWND hWnd)
 BOOL GcchGetCheck(HWND hWnd)
 {
 	return SendMessage(hWnd, WM_USER_GET_CHECK, 0, 0);
+}
+
+
+static LRESULT RadioButtonFunc(GcchRadioButton* button, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	RECT clientRect;
+	int width;
+	switch (msg)
+	{
+	case WM_USER_GET_CHECK:
+		if (button->item)
+			return button->hWnd == button->item->hWnd;
+		return 0;
+	case WM_USER_SET_CHECK:
+		if (wParam == GcchGetCheck(hWnd))
+			return 0;
+	case WM_USER_SWITCH_CHECK:
+		if (!button->item)
+			return 0;
+		// 需要切换选中状态
+		if (button->hWnd == button->item->hWnd)
+		{
+			// 原来是选中的，现在取消选中这个
+			button->item->hWnd = NULL;
+		}
+		else
+		{
+			// 原来没有选中
+			if (button->item->hWnd)
+				GcchSetCheck(button->item->hWnd, FALSE); // 取消原来的选中
+			button->item->hWnd = hWnd; // 选中这个
+		}
+		GcchRedraw(hWnd);
+		RaiseEvent((GcchControl*)button, hWnd, WM_USER_CHECK_CHANGED,
+			RadioButtonFunc(button, hWnd, WM_USER_GET_CHECK, 0, 0), 0);
+		return 0;
+	case WM_LBUTTONDOWN: // 左键按下表示要选中这个
+		return RadioButtonFunc(button, hWnd, WM_USER_SET_CHECK, TRUE, 0);
+	case WM_SETTEXT:
+		GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
+		width = GetCheckBoxWidth((LPCTSTR)lParam);
+		SetWindowPos(hWnd, NULL, 0, 0, width, 13, SWP_NOMOVE | SWP_NOZORDER);
+		return 0;
+	case WM_PAINT:
+	{
+					 COLORREF color;
+					 int x, y;
+					 GcchBitmap bitmap = { 0 };
+					 PAINTSTRUCT ps;
+					 RECT rect;
+					 TCHAR text[256];
+					 bitmap.hdc = BeginPaint(hWnd, &ps);
+					 GetClientRect(hWnd, &clientRect);
+					 GcchFillRectangle(g_bufferBitmap, &clientRect, 0xFAFAFA);
+					 if (IsWindowEnabled(hWnd))
+					 {
+						 color = 0;
+						 x = 0;
+						 if ((button->state & 1) != 0)
+						 {
+							 color = 0x5645BE;
+							 x = 14;
+						 }
+					 }
+					 else
+					 {
+						 color = 0xC0C0C0;
+						 x = 28;
+					 }
+					 y = 0;
+					 if (button->item && GcchGetCheck(hWnd))
+					 {
+						 // 位图块宽14高14
+						 y = 14;
+					 }
+					 GcchRect(&rect, 0, 0, 13, 13);
+					 GcchDrawBitmap(g_bufferBitmap, &rect, g_radioBitmap, x, y);
+					 GetWindowText(hWnd, text, 255);
+					 rect = clientRect;
+					 rect.left += 16;
+					 GcchDrawStringEx(g_bufferBitmap, text, -1, &rect, color, DT_END_ELLIPSIS | DT_SINGLELINE | DT_VCENTER);
+					 GcchDrawBitmap(&bitmap, &clientRect, g_bufferBitmap, 0, 0);
+					 EndPaint(hWnd, &ps);
+					 return 0;
+	}
+	}
+	return GcchDefButtonFunc((GcchButtonBase*)button, hWnd, msg, wParam, lParam);
+}
+
+HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text, int x, int y,
+	HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data)
+{
+	GcchRadioButton control = { 0 };
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)RadioButtonFunc, eventHandler,
+		data, id, sizeof(GcchRadioButton), GCCH_CT_RADIO);
+	control.item = item;
+	control.width = GetCheckBoxWidth(text);
+	control.height = 13;
+	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
+		x, y, control.width, control.height,
+		hWndParent, (HMENU)id, (GcchControl*)&control);
 }

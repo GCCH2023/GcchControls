@@ -71,6 +71,7 @@ typedef enum GcchControlType
 	GCCH_CT_LABEL,		// 标签控件
 	GCCH_CT_BUTTON,		// 按钮控件
 	GCCH_CT_CHECKBOX,		// 复选框控件
+	GCCH_CT_RADIO,		// 单选框控件
 }GcchControlType;
 
 // 水平排列方式枚举
@@ -132,6 +133,11 @@ void GcchInitControl(GcchControl* control, GcchControlFunc func, GcchEventFunc e
 
 // 获取控件的类型
 GcchControlType GcchGetControlType(HWND hWnd);
+// 获取控件的文本
+int GcchGetText(HWND hWnd, LPTSTR buffer, int bufferSize);
+// 设置控件的文本
+BOOL GcchSetText(HWND hWnd, LPCTSTR text);
+
 
 // 创建控件, 对 CreateWindowEx 的封装
 HWND GcchCreateControl(DWORD exStyle, LPCTSTR text, DWORD style,
@@ -292,8 +298,6 @@ HWND GcchCreateLabel(HWND hWndParent, UINT id, int x, int y, int width, int heig
 // 如果 width 或 height 为 0，则自动计算
 HWND GcchCreateLabelEx(HWND hWndParent, UINT id, int x, int y, int width, int height, LPCTSTR text,
 	GcchHorizontalAlignment horizontalAlignment, GcchVerticalAlignment verticalAlignment);
-// 设置标签的文本
-BOOL GcchSetLabelText(HWND hWnd, LPCTSTR text);
 // 设置标签的背景颜色
 void GcchSetLabelBackground(HWND hWnd, COLORREF color);
 // 设置标签的文本颜色
@@ -338,3 +342,24 @@ HWND GcchCreateCheckBox(LPCTSTR text, int x, int y,
 void GcchSetCheck(HWND hWnd, BOOL isCheck);
 void GcchSwitchCheck(HWND hWnd);
 BOOL GcchGetCheck(HWND hWnd);
+
+
+// Radio 的原理是
+// 同一组 Radio 共用一个 RadioItem
+// RadioItem 保存被选中的 Radio 的句柄
+typedef struct GcchRadioItem
+{
+	HWND hWnd; // 被选中的 Radio 的句柄
+}GcchRadioItem;
+
+
+// 单选框
+typedef struct GcchRadioButton
+{
+	GCCHCTRL
+	GcchRadioItem* item;  // 被选中的项
+}GcchRadioButton;
+
+// 创建单选框, no 不能是 -1
+HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text,
+	int x, int y, HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data);
