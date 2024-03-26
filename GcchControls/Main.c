@@ -1,17 +1,27 @@
 #include "GcchControls.h"
 #include <tchar.h>
+#include "resource.h"
 
 GcchBitmap* g_bitmap = NULL;
 HWND g_hWnd0 = NULL;
 HWND g_hWnd1 = NULL;
 GcchFont* g_font = NULL;
+GcchBitmap* g_colorButtons = NULL;
 
 LRESULT ButtonEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	if (msg == WM_USER_BUTTON_CLICK)
 	{
-		HWND hWnd = (HWND)control->data;
-		GcchSwitchCheck(hWnd);
+		if (control->id == 2)
+		{
+			HWND hWnd = (HWND)control->data;
+			GcchSwitchCheck(hWnd);
+		}
+		else if (control->id == 8)
+		{
+		/*	HWND hWnd = (HWND)control->data;
+			GcchSetPadding(hWnd, 20, 20);*/
+		}
 	}
 	return 0;
 }
@@ -44,6 +54,36 @@ LRESULT RadioButtonEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARA
 	return 0;
 }
 
+LRESULT ListBoxEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	static int toggles = 0;
+	GcchListBoxItem* listBoxItem = (GcchListBoxItem*)lParam;
+	if (msg == WM_USER_DRAW_ITEM)
+	{
+		GcchBitmap* bmp = (GcchBitmap*)wParam;
+		RECT rect = { 0, 0, listBoxItem->rect.right - listBoxItem->rect.left, listBoxItem->rect.bottom - listBoxItem->rect.top };
+		GcchFillRectangle(bmp, &rect, RGB(250, 250, 250));
+		if (listBoxItem->index < 6)
+		{
+			int row = listBoxItem->index, column = 0;
+			column = 2 * ((toggles >> row) & 1);
+			if ((listBoxItem->state & 2) != 0)
+				column |= 1;
+			rect.right = 21;
+			rect.bottom = 19;
+			GcchDrawBitmap(bmp, &rect, g_colorButtons, 21 * column, 20 * row);
+		}
+		return TRUE;
+	}
+	else if (msg == WM_USER_LSBX_LDOWN)
+	{
+		if (listBoxItem->index >= 0 && listBoxItem->index < 6)
+			toggles ^= 1 << listBoxItem->index;
+	}
+	return 0;
+}
+
+
 
 LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -56,7 +96,7 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 					  // g_bitmap = GcchCreateBitmap(400, 400);
 					  // g_bitmap = GcchLoadBitmapById(IDB_BUTTON);
 					  //g_bitmap = GcchLoadBitmap(_T("SKIN_BUTTON.bmp")); 	GcchControls.exe!GcchControlWndProc(HWND__ * hWnd, unsigned int msg, unsigned int wParam, long lParam) 行 32	C
-
+					  g_colorButtons = GcchLoadBitmap(MAKEINTRESOURCE(IDB_COLOR_BTNS), 0);
 					  //GcchRect(&rect, 0, 0, g_bitmap->width, g_bitmap->height);
 					  //GcchHalfTone(g_bitmap, &rect);
 					  g_font = GcchCreateFont(24, 24, 700, _T("Arial"));
@@ -69,8 +109,14 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 					  hwnd = GcchCreateCheckBox(_T("复选框"), 50, 80, hWnd, 3, CheckBoxEventHandler, hwnd);
 					  GcchCreateButton(_T("按钮"), 50, 100, 100, 40, hWnd, 2, ButtonEventHandler, hwnd);
 
+					  DWORD style = WS_CHILD | WS_VISIBLE;
+					 hwnd = GcchCreateListBox(0, style, 200, 50, 138, 19, hWnd, 7, ListBoxEventHandler, NULL);
+					 GcchSetItemSize(hwnd, 23, 19);
+					 GcchSetColumns(hwnd, 6);
 
-					  return 0;
+					 GcchCreateButton(_T("按钮"), 350, 50, 60, 20, hWnd, 8, ButtonEventHandler, hwnd);
+
+					 return 0;
 	}
 	case WM_LBUTTONDOWN:
 	{
@@ -147,6 +193,7 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 	case WM_DESTROY:
 		GcchDestroyBitmap(&g_bitmap);
 		GcchDestroyFont(&g_font);
+		GcchDestroyBitmap(&g_colorButtons);
 		PostQuitMessage(0);
 		return 0;
 	}
@@ -169,7 +216,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	//GcchShowWindow(hWnd, nShowCmd);
 
 	// 使用客户区大小来创建，客户区加上边框会比上面的窗口更大
-	hWnd = GcchCreateWindow(0, _T("Window"), WS_OVERLAPPEDWINDOW,
+	hWnd = GcchCreateWindow(0, _T("Window"), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
 		800, 600, (GcchControlFunc)GcchWindowFunc, NULL, NULL);
 	g_hWnd1 = hWnd;
 	GcchShowWindow(hWnd, nShowCmd);

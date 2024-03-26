@@ -205,6 +205,11 @@ BOOL GcchRedrawNow(HWND hWnd)
 	return RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
+BOOL GcchRedrawRect(HWND hWnd, LPCRECT rect)
+{
+	return RedrawWindow(hWnd, rect, NULL, RDW_INVALIDATE);
+}
+
 LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom)
 {
 	rect->left = left;
@@ -1214,4 +1219,416 @@ HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text, int x, int y,
 	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
 		x, y, control.width, control.height,
 		hWndParent, (HMENU)id, (GcchControl*)&control);
+}
+
+static void ScrollListBox(GcchListBox* listBox, BOOL redraw)
+{
+	RECT rect;
+	GcchList* list = listBox->list;
+	GcchListNode* item;
+	int count;
+
+	GetClientRect(listBox->hWnd, &rect);
+	if (list)
+	{
+		item = list->head;
+		count = 0;
+		for (count = 0; item; ++count)
+			item = item->next;
+	}
+	else
+	{
+		count = listBox->columns * listBox->rows;
+	}
+
+	DWORD style = GetWindowLong(listBox->hWnd, GWL_STYLE);
+	int hPos = GetScrollPos(listBox->hWnd, SB_HORZ);
+	int vPos = GetScrollPos(listBox->hWnd, SB_VERT);
+	SCROLLINFO scrollInfo = { 0 };
+	scrollInfo.cbSize = sizeof(scrollInfo);
+	scrollInfo.fMask = SIF_RANGE | SIF_PAGE;
+	if ((style & WS_HSCROLL) != 0)
+	{
+		scrollInfo.nPage = rect.right - rect.left;
+		scrollInfo.nMax = listBox->itemWidth * listBox->columns +listBox->paddingX - 1;
+	}
+	SetScrollInfo(listBox->hWnd, 0, &scrollInfo, redraw);
+
+	memset(&scrollInfo, 0, sizeof(scrollInfo));
+	scrollInfo.cbSize = sizeof(scrollInfo);
+	scrollInfo.fMask = SIF_RANGE | SIF_PAGE;
+	if ((style & WS_VSCROLL) != 0)
+	{
+		scrollInfo.nPage = rect.bottom - rect.top;
+		scrollInfo.nMax = listBox->itemHeight * ((listBox->columns + count - 1) / listBox->columns) +listBox->paddingY - 1;
+	}
+
+	SetScrollInfo(listBox->hWnd, SB_VERT, &scrollInfo, redraw);
+	int deltaX = hPos - GetScrollPos(listBox->hWnd, SB_HORZ);
+	int deltaY = vPos - GetScrollPos(listBox->hWnd, SB_VERT);
+	if (deltaX || deltaY)
+		ScrollWindowEx(listBox->hWnd, deltaX, deltaY, 0, 0, 0, 0, SW_INVALIDATE);
+}
+
+static void DrawListBoxItem(GcchListBox* listBox, GcchBitmap* bmp, GcchListBoxItem* listBoxItem, GcchListNode *item, LPRECT rect)
+{
+	COLORREF textColor, backColor;
+	if ((listBoxItem->state & 4) != 0)
+	{
+		textColor = 0;
+		backColor = RGB(255, 255, 255);
+		if ((listBoxItem->state & GCCH_CS_CHECKED) != 0)		// 选中
+		{
+			backColor = RGB(184, 184, 192);
+		}
+		else if ((listBoxItem->state & GCCH_CS_HOVER) != 0)	// 悬停
+		{
+			backColor = RGB(224, 224, 232);
+		}
+	}
+	else
+	{
+		textColor = RGB(192, 192, 192);
+		backColor = RGB(255, 255, 255);
+	}
+	GcchFillRectangle(bmp, rect, backColor);
+	GcchRectBySize(rect, 4, 0, listBoxItem->rect.right - listBoxItem->rect.left - 8, listBoxItem->rect.bottom - listBoxItem->rect.top);
+	GcchDrawStringEx(bmp, item->text, -1, rect, textColor, DT_END_ELLIPSIS | DT_SINGLELINE | DT_VCENTER);
+}
+
+static void InitListBoxItem(GcchListBoxItem* listBoxItem, int row, int column)
+{
+	listBoxItem->index = -1;
+	listBoxItem->item = NULL;
+	listBoxItem->state = 0;
+	listBoxItem->row = row;
+	listBoxItem->column = column;
+	listBoxItem->x = 0;
+	listBoxItem->y = 0;
+}
+
+static LRESULT OnListBoxPaint(GcchListBox* listBox)
+{
+	PAINTSTRUCT paint;
+	HWND hWnd = listBox->hWnd;
+	HDC hdc = BeginPaint(hWnd, &paint);
+	GcchBitmap bitmap = { 0 };
+	GcchBitmap* bmp = g_bufferBitmap;
+	bitmap.hdc = hdc;
+	
+	BOOL isEnable = IsWindowEnabled(hWnd);
+	RECT clientRect, rect;
+	GetClientRect(hWnd, &clientRect);
+	int posH = GetScrollPos(hWnd, SB_HORZ);
+	int posV = GetScrollPos(hWnd, SB_VERT);
+
+	if (-posV >= clientRect.bottom)
+	{
+		EndPaint(hWnd, &paint);
+		return 0;
+	}
+
+	GcchListBoxItem listBoxItem;
+	listBoxItem.rect.left = clientRect.left;
+	listBoxItem.rect.right = clientRect.right;
+	GcchListNode *item = listBox->list ? listBox->list->head : NULL;
+	listBoxItem.rect.top = -posV;
+	listBoxItem.rect.bottom = listBoxItem.rect.top + listBox->itemHeight;
+	int index = 0;
+	for (int row = 0; listBoxItem.rect.top < clientRect.bottom; ++row)
+	{
+		for (int column = 0; column < listBox->columns || listBoxItem.rect.left < clientRect.right; ++column)
+		{
+			listBoxItem.rect.left = listBox->itemWidth * column - posH;
+			listBoxItem.rect.right = listBoxItem.rect.left + listBox->itemWidth;
+			if (GcchRectAnd(NULL, &listBoxItem.rect, &paint.rcPaint))
+			{
+				InitListBoxItem(&listBoxItem, row, column);
+				if (column < listBox->columns)
+				{
+					listBoxItem.item = item;
+					listBoxItem.index = index;
+					if (isEnable)
+					{
+						listBoxItem.state = GCCH_CS_ENABLE;
+						if (index == listBox->selectIndex)
+							listBoxItem.state |= GCCH_CS_HOVER;
+						if (index == listBox->listBoxItem.index)
+						{
+							listBoxItem.x = listBox->listBoxItem.x;
+							listBoxItem.y = listBox->listBoxItem.y;
+							listBoxItem.state |= GCCH_CS_CHECKED;
+						}
+					}
+				}
+				if (RaiseEvent((GcchControl*)listBox, hWnd, WM_USER_DRAW_ITEM, (WPARAM)bmp, (LPARAM)&listBoxItem))
+				{
+					if (!isEnable)
+					{
+						GcchHalfTone(bmp, &listBoxItem.rect);
+					}
+				}
+				else
+				{
+					GcchRectBySize(&rect, 0, 0, listBoxItem.rect.right - listBoxItem.rect.left, listBoxItem.rect.bottom - listBoxItem.rect.top);
+					if (item)
+						DrawListBoxItem(listBox, bmp, &listBoxItem, item, &rect);
+					else
+						GcchFillRectangle(bmp, &rect, RGB(192, 192, 192));
+				}
+				GcchDrawBitmap(&bitmap, &listBoxItem.rect, bmp, 0, 0);
+			}
+
+			if (column < listBox->columns)
+			{
+				if (item)
+					item = item->next;
+				++index;
+			}
+		}
+		listBoxItem.rect.top += listBox->itemHeight;
+		listBoxItem.rect.bottom += listBox->itemHeight;
+	}
+	EndPaint(hWnd, &paint);
+	return 0;
+}
+
+BOOL GetListBoxItem(GcchListBox* listBox, int x, int y, BOOL containsLastRow, GcchListBoxItem *listBoxItem)
+{
+	RECT rect;
+
+	memset(listBoxItem, 0, sizeof(GcchListBoxItem));
+	InitListBoxItem(listBoxItem, 0, 0);
+	listBoxItem->item = 0;
+	listBoxItem->index = -1;
+	listBoxItem->column = x;
+	listBoxItem->row = y;
+
+	GetClientRect(listBox->hWnd, &rect);
+	if (containsLastRow)
+		rect.bottom += listBox->itemHeight;
+
+	if (!GcchRectContains(&rect, x, y))
+		return FALSE;
+
+	int posH = GetScrollPos(listBox->hWnd, SB_HORZ);
+	int posV = GetScrollPos(listBox->hWnd, SB_VERT);
+	GcchMoveRect(&rect, posH, posV);
+	if (rect.bottom <= 0)
+		return FALSE;
+
+	x += posH;
+	y += posV;
+
+	GcchListNode *item = listBox->list ? listBox->list->head : NULL;
+	int index = 0;
+	for (int row = 0;; ++row)
+	{
+		listBoxItem->rect.top = listBox->itemHeight * row;
+		if (listBoxItem->rect.top >= rect.bottom) // 超出了视口的下边
+			break;
+		listBoxItem->rect.bottom = listBoxItem->rect.top + listBox->itemHeight;
+		for (int col = 0; col < listBox->columns; ++col)
+		{
+			listBoxItem->rect.left = listBox->itemWidth * col;
+			if (listBoxItem->rect.left >= rect.right) // 超出了视口的右边
+				break;
+			listBoxItem->rect.right = listBoxItem->rect.left + listBox->itemWidth;
+
+			// 判断鼠标是否点击当前项
+			if (GcchRectContains(&listBoxItem->rect, x, y))
+			{
+				listBoxItem->x = x - listBoxItem->rect.left;
+				listBoxItem->y = y - listBoxItem->rect.top;
+				listBoxItem->item = item;
+				listBoxItem->index = index;
+				return TRUE;
+			}
+
+			if (item)
+				item = item->next;
+			++index;
+		}
+	}
+	return FALSE;
+}
+
+static BOOL GetListNodeRect(GcchListBox *listBox, GcchListNode *item, LPRECT rect)
+{
+	GcchList* list = listBox->list;
+	GcchListNode* node;
+	if (!list)
+		return FALSE;
+
+	node = list->head;
+	for (int row = 0; node; ++row)
+	{
+		for (int column = 0; node && column < listBox->columns; ++column)
+		{
+			if (node == item)
+			{
+				int posH = GetScrollPos(listBox->hWnd, SB_HORZ);
+				int posV = GetScrollPos(listBox->hWnd, SB_VERT);
+				GcchRect(rect, column * listBox->itemWidth - posH, row * listBox->itemHeight - posV, listBox->itemWidth, listBox->itemHeight);
+				return TRUE;
+			}
+			node = node->next;
+		}
+	}
+	return FALSE;
+}
+
+static BOOL RedrawListBoxItem(GcchListBox *listBox, GcchListBoxItem *listBoxItem)
+{
+	RECT rect;
+	if (TRUE) // 没想好
+	{
+		int posH =GetScrollPos(listBox->hWnd, SB_HORZ);
+		int posV =GetScrollPos(listBox->hWnd, SB_VERT);
+		rect = listBoxItem->rect;
+		GcchMoveRect(&rect, -posH, -posV);
+		return GcchRedrawRect(listBox->hWnd, &rect);
+	}
+
+	if (GetListNodeRect(listBox, listBoxItem->item, &rect))
+		return GcchRedrawRect(listBox->hWnd, &rect);
+
+	return GcchRedraw(listBox->hWnd);
+}
+
+static LRESULT ListBoxFunc(GcchListBox* listBox, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	int rows, columns;
+	RECT rect;
+	GcchListBoxItem listBoxItem;
+	switch (msg)
+	{
+	case WM_USER_SET_ITEMSIZE:
+		listBox->itemWidth = wParam;
+		listBox->itemHeight = lParam;
+		ScrollListBox(listBox, TRUE);
+		return 0;
+	case WM_USER_SET_ROWS:
+		rows = wParam;
+		if (!wParam)
+			rows = 1;
+		if (listBox->rows != rows)
+		{
+			listBox->rows = rows;
+			ScrollListBox(listBox, TRUE);
+		}
+		return 0;
+	case WM_USER_SET_COLUMNS:
+		columns = wParam;
+		if (!wParam)
+			columns = 1;
+		if (listBox->columns != columns)
+		{
+			listBox->columns = columns;
+			ScrollListBox(listBox, TRUE);
+		}
+		return 0;
+	case WM_USER_SET_PADDING:
+		listBox->paddingX = wParam;
+		listBox->paddingY = lParam;
+		ScrollListBox(listBox, TRUE);
+		return 0;
+	case WM_CREATE:
+		GetClientRect(hWnd, &rect);
+		listBox->listBoxItem.index = -1;
+		listBox->listBoxItem.item = 0;
+		if (!listBox->itemWidth)
+		{
+			listBox->itemWidth = rect.right - rect.left;
+			if (listBox->itemWidth <= 0)
+				listBox->itemWidth = 16;
+		}
+		if (!listBox->itemHeight)
+		{
+			listBox->itemHeight = 16;
+			if (listBox->itemHeight <= 0)
+				listBox->itemHeight = 16;
+		}
+		ScrollListBox(listBox, FALSE);
+		RaiseEvent((GcchControl*)listBox, hWnd, WM_USER_INIT, 0, 0);
+		return 0;
+	case WM_SIZE:
+		if ((listBox->state & GCCH_LBS_AUTO_ITEM_SIZE) != 0)
+		{
+			GetClientRect(hWnd, &rect);
+			listBox->itemWidth = rect.right - rect.left;
+		}
+		ScrollListBox(listBox, TRUE);
+		return 0;
+	case WM_PAINT:
+		return OnListBoxPaint(listBox);
+	case WM_MOUSEMOVE:
+		if ((listBox->state & GCCH_CS_HOVER) == 0)
+		{
+			listBox->state |= GCCH_CS_HOVER;
+		}
+		GetListBoxItem(listBox, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), FALSE, &listBoxItem);
+		if (listBox->listBoxItem.index != listBoxItem.index)
+		{
+			if (listBoxItem.index >= 0)
+				RedrawListBoxItem(listBox, &listBoxItem);
+			if (listBox->listBoxItem.index >= 0)
+				RedrawListBoxItem(listBox, &listBox->listBoxItem);
+			memcpy(&listBox->listBoxItem, &listBoxItem, sizeof(listBoxItem));
+		}
+		return 0;
+	case WM_MOUSELEAVE:
+		listBox->state &= ~GCCH_CS_HOVER;
+		if (listBox->listBoxItem.index >= 0)
+		{
+			listBox->listBoxItem.index = -1;
+			listBox->listBoxItem.item = NULL;
+			int posH = GetScrollPos(listBox->hWnd, SB_HORZ);
+			int posV = GetScrollPos(listBox->hWnd, SB_VERT);
+			rect = listBox->listBoxItem.rect;
+			GcchMoveRect(&rect, -posH, -posV);
+			GcchRedrawRect(hWnd, &rect);
+		}
+		return 0;
+	case WM_LBUTTONDOWN:
+		GetListBoxItem(listBox, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), FALSE, &listBoxItem);
+		RaiseEvent((GcchControl*)listBox, hWnd, WM_USER_LSBX_LDOWN, 0, (WPARAM)&listBoxItem);
+		return 0;
+	}
+	return GcchDefControlFunc((GcchControl*)listBox, hWnd, msg, wParam, lParam);
+}
+
+HWND GcchCreateListBox(DWORD exStyle, DWORD style, int x, int y, int width, int height,
+	HWND parent, UINT id, GcchEventFunc eventHandler, LPVOID data)
+{
+	GcchListBox control = { 0 };
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)ListBoxFunc, eventHandler,
+		data, id, sizeof(GcchListBox), GCCH_CT_LISTBOX);
+	control.itemWidth = 16;
+	control.itemHeight = 16;
+	control.rows = 1;
+	control.columns = 1;
+	
+	return GcchCreateControl(exStyle, NULL, style, x, y, width, height,
+		parent, (HMENU)id, (GcchControl*)&control);
+}
+
+void GcchSetItemSize(HWND hWnd, int width, int height)
+{
+	SendMessage(hWnd, WM_USER_SET_ITEMSIZE, width, height);
+}
+
+void GcchSetRows(HWND hWnd, int rows)
+{
+	SendMessage(hWnd, WM_USER_SET_ROWS, rows, 0);
+}
+
+void GcchSetColumns(HWND hWnd, int columns)
+{
+	SendMessage(hWnd, WM_USER_SET_COLUMNS, columns, 0);
+}
+
+void GcchSetPadding(HWND hWnd, int paddingX, int paddingY)
+{
+	SendMessage(hWnd, WM_USER_SET_PADDING, paddingX, paddingY);
 }

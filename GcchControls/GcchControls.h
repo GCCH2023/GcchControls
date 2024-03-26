@@ -60,7 +60,23 @@ typedef enum GcchMessage
 	// 获取选中状态，没有参数
 	WM_USER_GET_CHECK,
 	// 切换选中状态，没有参数
-	WM_USER_SWITCH_CHECK
+	WM_USER_SWITCH_CHECK,
+
+	// 初始化，无参数
+	WM_USER_INIT,
+	// 设置项的大小, wParam 是宽度，lParam 是高度
+	WM_USER_SET_ITEMSIZE,
+	// 设置列表框的行数, wParam 是行数
+	WM_USER_SET_ROWS,
+	// 设置列表框的列数, wParam 是列数
+	WM_USER_SET_COLUMNS,
+	// 绘制列表项, wParam 是缓冲位图，lParam是GcchListBoxItem指针对象,
+	// 绘制了返回TRUE，没有绘制返回FALSE
+	WM_USER_DRAW_ITEM,
+	// 设置内间距, wParam 是水平间距，lParam是垂直间距
+	WM_USER_SET_PADDING,
+	// 列表框左键按下, wParam 是 0, lParam对应的ListBoxItem
+	WM_USER_LSBX_LDOWN,
 }GcchMessage;
 
 // 枚举控件类型
@@ -72,6 +88,7 @@ typedef enum GcchControlType
 	GCCH_CT_BUTTON,		// 按钮控件
 	GCCH_CT_CHECKBOX,		// 复选框控件
 	GCCH_CT_RADIO,		// 单选框控件
+	GCCH_CT_LISTBOX,  // 列表框
 }GcchControlType;
 
 // 水平排列方式枚举
@@ -98,6 +115,7 @@ typedef enum GcchControlState
 	GCCH_CS_HOVER = 1,		// 鼠标悬停
 	GCCH_CS_PRESSED = 2,	// 鼠标按下
 	GCCH_CS_CHECKED = 2,	// 按钮选中
+	GCCH_CS_ENABLE = 4,		// 可用
 }GcchControlState;
 
 // 窗口句柄
@@ -158,6 +176,8 @@ void GcchSetControlSize(HWND hWnd, int width, int height);
 BOOL GcchRedraw(HWND hWnd);
 // 马上重绘窗口的全部
 BOOL GcchRedrawNow(HWND hWnd);
+// 重绘窗口的矩形部分
+BOOL GcchRedrawRect(HWND hWnd, LPCRECT rect);
 
 // 使用 左，上，右，下 四个值来构造
 LPRECT GcchRect(LPRECT rect, LONG left, LONG top, LONG right, LONG bottom);
@@ -363,3 +383,73 @@ typedef struct GcchRadioButton
 // 创建单选框, no 不能是 -1
 HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text,
 	int x, int y, HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data);
+
+typedef struct GcchList
+{
+	struct GcchListNode* head;
+	struct GcchListNode* tail;
+}GcchList;
+
+
+typedef struct GcchListNode
+{
+	struct GcchListNode* next;
+	struct GcchListNode* prev;
+	GcchList* list;
+	LPCTSTR text;
+}GcchListNode;
+
+
+// 表示列表中的一项
+typedef struct GcchListBoxItem
+{
+	int column;
+	int row;
+	int x;
+	int y;
+	RECT rect;
+	int index;	// 点击的列表项索引（UI）
+	int m9;
+	GcchListNode* item;// 点击的数据项
+	int m11;
+	// 位0 表示当前项是选中项
+	// 位1 表示当前项是鼠标所在项
+	// 位2 表示当前项是可用的（enable）
+	int state;	// 位1表示鼠标是否进入
+}GcchListBoxItem;
+
+// 列表框的状态
+// 覆盖了 GcchControlState
+typedef enum GcchListBoxState
+{
+	GCCH_LBS_AUTO_ITEM_SIZE = 1,  // 自动设置项的大小
+}GcchListBoxState;
+
+// 列表框
+typedef struct GcchListBox
+{
+	GCCHCTRL
+	GcchList* list;
+	int rows;  // 行数
+	int columns;  // 列数
+	int itemWidth;  // 项的宽度
+	int itemHeight;  // 项的高度
+	int paddingX;
+	int paddingY;
+	int selectIndex; // 选中项的索引
+	int m2_4;
+	GcchListBoxItem listBoxItem;
+}GcchListBox;
+
+// 创建列表框
+// 如果需要滚动条，则 style 中需要有 WS_HSCROLL 或 WS_VSCROLL 样式
+HWND GcchCreateListBox(DWORD exStyle, DWORD style, int x, int y, int width, int height,
+	HWND parent, UINT id, GcchEventFunc eventHandler, LPVOID data);
+// 设置项的大小
+void GcchSetItemSize(HWND hWnd, int width, int height);
+// 设置列表框行数
+void GcchSetRows(HWND hWnd, int rows);
+// 设置列表框列数
+void GcchSetColumns(HWND hWnd, int columns);
+// 设置列表框的内间距
+void GcchSetPadding(HWND hWnd, int paddingX, int paddingY);

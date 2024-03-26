@@ -89,6 +89,7 @@
     <ResourceCompile Include="GcchControls.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="res\COLOR_BTNS.bmp" />
     <Image Include="res\SKIN_BUTTON.bmp" />
     <Image Include="res\SKIN_CHECKBOX.bmp" />
     <Image Include="res\SKIN_RADIO.bmp" />

@@ -45,5 +45,8 @@
     <Image Include="res\SKIN_RADIO.bmp">
       <Filter>资源文件</Filter>
     </Image>
+    <Image Include="res\COLOR_BTNS.bmp">
+      <Filter>资源文件</Filter>
+    </Image>
   </ItemGroup>
 </Project>
