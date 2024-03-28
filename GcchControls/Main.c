@@ -10,6 +10,7 @@ GcchBitmap* g_colorButtons = NULL;
 
 LRESULT ButtonEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	static BOOL isFirst = TRUE;
 	if (msg == WM_USER_BUTTON_CLICK)
 	{
 		if (control->id == 2)
@@ -19,8 +20,12 @@ LRESULT ButtonEventHandler(GcchControl* control, HWND hWnd, UINT msg, WPARAM wPa
 		}
 		else if (control->id == 8)
 		{
-		/*	HWND hWnd = (HWND)control->data;
-			GcchSetPadding(hWnd, 20, 20);*/
+			if (isFirst)
+			{
+				HWND hWnd = (HWND)control->data;
+				HWND hwnd = GcchCreateButton(_T("组框子按钮"), 0, 0, 80, 30, hWnd, 100, NULL, NULL);
+				isFirst = FALSE;
+			}
 		}
 	}
 	return 0;
@@ -114,7 +119,9 @@ LRESULT GcchWindowFunc(GcchWindow* control, HWND hWnd, UINT msg, WPARAM wParam, 
 					 GcchSetItemSize(hwnd, 23, 19);
 					 GcchSetColumns(hwnd, 6);
 
-					 GcchCreateButton(_T("按钮"), 350, 50, 60, 20, hWnd, 8, ButtonEventHandler, hwnd);
+					 hwnd = GcchCreateGroupBox(_T("组框"), 200, 100, 200, 200, hWnd, 9);
+					 GcchCreateButton(_T("添加组框子按钮"), 350, 50, 120, 20, hWnd, 8, ButtonEventHandler, hwnd);
+					 // GcchCreateButton(_T("按钮"), 00, 0, 100, 40, hwnd, 10, NULL, NULL);
 
 					 return 0;
 	}

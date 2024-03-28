@@ -18,6 +18,8 @@ static GcchBitmap* g_buttonBitmap = NULL;
 static GcchBitmap* g_checkBoxBitmap = NULL;
 // 单选框位图
 static GcchBitmap* g_radioBitmap = NULL;
+// 边框位图
+static GcchBitmap* g_borderBitmap = NULL;
 // 当前悬停的窗口
 static HWND g_hWndMouseHover = NULL;
 
@@ -110,6 +112,10 @@ BOOL GcchInitialize(HINSTANCE hInstance)
 	if (g_radioBitmap == NULL)
 		return FALSE;
 
+	g_borderBitmap = GcchLoadBitmap(MAKEINTRESOURCE(IDB_BORDER), 0);
+	if (g_borderBitmap == NULL)
+		return FALSE;
+
 	return TRUE;
 }
 
@@ -119,6 +125,7 @@ void GcchUninitialize()
 	GcchDestroyBitmap(&g_buttonBitmap);
 	GcchDestroyBitmap(&g_checkBoxBitmap);
 	GcchDestroyBitmap(&g_radioBitmap);
+	GcchDestroyBitmap(&g_borderBitmap);
 	GcchDestroyBitmap(&g_bufferBitmap);
 	GcchDestroyFont(&g_defaultFont);
 }
@@ -1218,6 +1225,77 @@ HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text, int x, int y,
 	control.height = 13;
 	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE,
 		x, y, control.width, control.height,
+		hWndParent, (HMENU)id, (GcchControl*)&control);
+}
+
+LRESULT GroupBoxFunc(GcchGroupBox* groupBox, HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg)
+	{
+	case WM_NCCALCSIZE:
+	{
+						  // 缩小客户区作为非客户区
+						  LPNCCALCSIZE_PARAMS lpcp = (LPNCCALCSIZE_PARAMS)lParam;
+						  RECT rect;
+						  GcchMeasureString(g_bufferBitmap, _T("组框"), 2, &rect, 0); // 文本的高度都是一样的
+						  groupBox->titleHeight = GcchGetRectHeight(&rect);
+						  GcchRectAdd(&lpcp->rgrc[0], 4, groupBox->titleHeight, -4, -4);
+						  return 0;
+	}
+	case WM_NCPAINT:
+	{
+					   HDC hdc = GetWindowDC(hWnd);
+					   GcchBitmap bitmap = { 0 };
+					   bitmap.hdc = hdc;
+					   RECT winRect, rect, srcRect, sliceRect;
+					   TCHAR text[64];
+					   GetWindowRect(hWnd, &winRect);
+					   // 需要将左上角坐标清零
+					   GcchMoveRect(&winRect, -winRect.left, -winRect.top);
+					   // 绘制背景
+					   GcchFillRectangle(g_bufferBitmap, &winRect, groupBox->background);
+					   // 绘制边框
+					   GcchRectBySize(&srcRect, 0, 0, 36, 36);
+					   GcchRect(&sliceRect, 4, 4, 4, 4);
+					   // 边框的上边要居中
+					   GcchRect(&rect, 0, groupBox->titleHeight / 2 - 2, GcchGetRectWidth(&winRect), winRect.bottom);
+					   GcchDrawSliceBitmap(g_bufferBitmap, &rect, g_borderBitmap, &srcRect, &sliceRect);
+					   // 绘制文本
+					   GetWindowText(hWnd, text, ARRAYSIZE(text));
+					   GcchMeasureString(g_bufferBitmap, text, -1, &rect, 0);
+					   // 绘制文本背景
+					   GcchRectAdd(&rect, 10, 0, 16, 0);  // 增加一点边距
+					   GcchFillRectangle(g_bufferBitmap, &rect, groupBox->background);
+					   GcchDrawString(g_bufferBitmap, text, rect.left + 3, rect.top, groupBox->foreground);
+					   // 绘制到窗口上
+					   GcchDrawBitmap(&bitmap, &winRect, g_bufferBitmap, 0, 0);
+					   ReleaseDC(hWnd, hdc);
+					   return 0;
+	}
+	case WM_PAINT:
+	{
+					 PAINTSTRUCT ps;
+					 GcchBitmap bitmap = { 0 };
+					 bitmap.hdc = BeginPaint(hWnd, &ps);
+					 RECT rect;
+					 GetClientRect(hWnd, &rect);
+					 GcchFillRectangle(&bitmap, &rect, RGB(0, 250, 250));
+					 EndPaint(hWnd, &ps);
+					 return 0;
+	}
+	}
+	return GcchDefButtonFunc((GcchButtonBase*)groupBox, hWnd, msg, wParam, lParam);
+}
+
+HWND GcchCreateGroupBox(LPCTSTR text, int x, int y, int width, int height, HWND hWndParent, UINT id)
+{
+	GcchGroupBox control = { 0 };
+	GcchInitControl((GcchControl*)&control, (GcchControlFunc)GroupBoxFunc, NULL,
+		NULL, id, sizeof(GcchGroupBox), GCCH_CT_GROUPBOX);
+	control.background = RGB(250, 250, 250);
+	control.foreground = RGB(0, 0, 0);
+	return GcchCreateControl(0, text, WS_CHILD | WS_VISIBLE | WS_BORDER,
+		x, y, width, height,
 		hWndParent, (HMENU)id, (GcchControl*)&control);
 }
 

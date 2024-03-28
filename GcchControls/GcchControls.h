@@ -88,6 +88,7 @@ typedef enum GcchControlType
 	GCCH_CT_BUTTON,		// 按钮控件
 	GCCH_CT_CHECKBOX,		// 复选框控件
 	GCCH_CT_RADIO,		// 单选框控件
+	GCCH_CT_GROUPBOX, // 组框
 	GCCH_CT_LISTBOX,  // 列表框
 }GcchControlType;
 
@@ -384,6 +385,19 @@ typedef struct GcchRadioButton
 HWND GcchCreateRadioButton(GcchRadioItem* item, LPCTSTR text,
 	int x, int y, HWND hWndParent, UINT id, GcchEventFunc eventHandler, LPVOID data);
 
+
+// 组框
+typedef struct GcchGroupBox
+{
+	GCCHCTRL
+	int titleHeight;  // 标题文本的高度
+	COLORREF background;  // 背景颜色
+	COLORREF foreground;  // 文本颜色
+}GcchGroupBox;
+
+// 创建组框
+HWND GcchCreateGroupBox(LPCTSTR text, int x, int y, int width, int height, HWND hWndParent, UINT id);
+
 typedef struct GcchList
 {
 	struct GcchListNode* head;
@@ -409,9 +423,7 @@ typedef struct GcchListBoxItem
 	int y;
 	RECT rect;
 	int index;	// 点击的列表项索引（UI）
-	int m9;
 	GcchListNode* item;// 点击的数据项
-	int m11;
 	// 位0 表示当前项是选中项
 	// 位1 表示当前项是鼠标所在项
 	// 位2 表示当前项是可用的（enable）
@@ -437,7 +449,6 @@ typedef struct GcchListBox
 	int paddingX;
 	int paddingY;
 	int selectIndex; // 选中项的索引
-	int m2_4;
 	GcchListBoxItem listBoxItem;
 }GcchListBox;
 
